@@ -4,7 +4,7 @@ import 'bootstrap/dist/css/bootstrap.min.css';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
 
 // LIVE BACKEND BASE URL
-const BASE_URL = 'https://my-ecommerce-project-nmfj.onrender.com';
+const BASE_URL = 'https://my-ecommerce-project-nmfj.onrender.com/';
 
 function App() {
   // Authentication State
