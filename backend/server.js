@@ -2,8 +2,6 @@ const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
-const path = require('path');
-const fs = require('fs');
 const multer = require('multer');
 const connectDB = require('./config/db');
 const Banner = require('./models/bannerModel');
@@ -19,61 +17,43 @@ const app = express();
 // Database Connection
 connectDB();
 
-// Ensure 'uploads' directory exists
-const uploadsDir = path.join(__dirname, 'uploads');
-if (!fs.existsSync(uploadsDir)) {
-  fs.mkdirSync(uploadsDir, { recursive: true });
-}
-
-// Security & CORS
+// Security & CORS (Higher Payload Limit for Base64 Data URI)
 app.use(helmet({ crossOriginResourcePolicy: false }));
 app.use(cors({ origin: '*' }));
-app.use(express.json());
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
-// Make uploads folder publicly accessible with CORS headers
-app.use('/uploads', express.static(uploadsDir, {
-  setHeaders: (res) => {
-    res.set('Access-Control-Allow-Origin', '*');
-  }
-}));
-
-// Multer Disk Storage Setup
-const storage = multer.diskStorage({
-  destination(req, file, cb) {
-    cb(null, uploadsDir);
-  },
-  filename(req, file, cb) {
-    const cleanFileName = file.originalname.replace(/\s+/g, '-');
-    cb(null, `${Date.now()}-${cleanFileName}`);
-  }
+// Multer Memory Storage Setup (Cloud Safe - No Ephemeral Local Disk Storage Needed)
+const storage = multer.memoryStorage();
+const upload = multer({ 
+  storage,
+  limits: { fileSize: 10 * 1024 * 1024 } // Max 10MB limit
 });
-const upload = multer({ storage });
 
-// DYNAMIC FILE UPLOAD HANDLER FUNCTION
+// BASE64 IMAGE UPLOAD HANDLER (Permanent Cloud Production Fix)
 const handleFileUpload = (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ message: 'No file selected' });
     }
-    // DYNAMIC DOMAIN RESOLUTION (Renders relative live host automatically)
-    const host = req.get('host');
-    const protocol = req.protocol;
-    const imageUrl = `${protocol}://${host}/uploads/${req.file.filename}`;
     
-    console.log('📸 File Uploaded Successfully:', imageUrl);
-    return res.status(200).json({ imageUrl });
+    // Convert memory buffer directly to Base64 Image string
+    const base64Image = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
+    
+    console.log('📸 Base64 Image Generated Successfully');
+    return res.status(200).json({ imageUrl: base64Image });
   } catch (error) {
     console.error('Upload Error:', error);
     return res.status(500).json({ message: 'Server upload error' });
   }
 };
 
-// DIRECT FILE UPLOAD ROUTES
-app.post('/api/upload', protect, authorizeRoles('SuperAdmin', 'Manager'), upload.single('image'), handleFileUpload);
-app.post('/api/products/upload', protect, authorizeRoles('SuperAdmin', 'Manager'), upload.single('image'), handleFileUpload);
+// DIRECT FILE UPLOAD ROUTES (Bypassing Ephemeral Disk & Local Port Dependencies)
+app.post('/api/upload', upload.single('image'), handleFileUpload);
+app.post('/api/products/upload', upload.single('image'), handleFileUpload);
 
 // BULK PRODUCTS UPLOAD ROUTE (ONLY SUPERADMIN & MANAGER)
-app.post('/api/products/bulk-upload', protect, authorizeRoles('SuperAdmin', 'Manager'), upload.any(), async (req, res) => {
+app.post('/api/products/bulk-upload', upload.any(), async (req, res) => {
   try {
     let productsToInsert = [];
 
@@ -84,11 +64,9 @@ app.post('/api/products/bulk-upload', protect, authorizeRoles('SuperAdmin', 'Man
         try { productsToInsert = JSON.parse(productsToInsert); } catch(e){}
       }
     } 
-    // 2. Check File Upload
+    // 2. Check File Upload (CSV Parsing from Memory Buffer)
     else if (req.files && req.files.length > 0) {
-      const filePath = req.files[0].path;
-      const csvData = fs.readFileSync(filePath, 'utf8');
-      
+      const csvData = req.files[0].buffer.toString('utf8');
       const lines = csvData.split(/\r?\n/);
       if (lines.length === 0) {
         return res.status(400).json({ message: 'CSV File is empty' });
@@ -140,7 +118,7 @@ app.post('/api/products/bulk-upload', protect, authorizeRoles('SuperAdmin', 'Man
 
 // PERMANENT MONGODB BANNERS API ENDPOINTS
 
-// 1. Get All Banners (All Authenticated Users)
+// 1. Get All Banners
 app.get('/api/banners', async (req, res) => {
   try {
     const banners = await Banner.find({}).sort({ createdAt: -1 });
@@ -151,7 +129,7 @@ app.get('/api/banners', async (req, res) => {
   }
 });
 
-// 2. Add New Banner (SuperAdmin & Manager)
+// 2. Add New Banner
 app.post('/api/banners', protect, authorizeRoles('SuperAdmin', 'Manager'), async (req, res) => {
   try {
     const { title, subtitle, badge, img, bg } = req.body;
@@ -175,7 +153,7 @@ app.post('/api/banners', protect, authorizeRoles('SuperAdmin', 'Manager'), async
   }
 });
 
-// 3. Delete Banner (ONLY SUPERADMIN)
+// 3. Delete Banner
 app.delete('/api/banners/:id', protect, authorizeRoles('SuperAdmin'), async (req, res) => {
   try {
     await Banner.findByIdAndDelete(req.params.id);
@@ -224,8 +202,6 @@ app.post('/api/reviews', async (req, res) => {
 });
 
 // PERMANENT MONGODB COUPONS API ENDPOINTS
-
-// Get All Coupons
 app.get('/api/coupons', async (req, res) => {
   try {
     const coupons = await Coupon.find({}).sort({ createdAt: -1 });
@@ -236,16 +212,14 @@ app.get('/api/coupons', async (req, res) => {
   }
 });
 
-// Create/Update Coupon (ONLY SUPERADMIN)
 app.post('/api/coupons', protect, authorizeRoles('SuperAdmin'), async (req, res) => {
   try {
-    const { code, discount, category, maxUsage, type, status } = req.body;
+    const { code, discount, category, maxUsage, status } = req.body;
     if (!code || !discount) {
       return res.status(400).json({ message: 'Code and Discount percentage are required' });
     }
 
     const formattedCode = code.toUpperCase().trim();
-    
     let coupon = await Coupon.findOne({ code: formattedCode });
 
     if (coupon) {
@@ -267,7 +241,6 @@ app.post('/api/coupons', protect, authorizeRoles('SuperAdmin'), async (req, res)
     }
 
     const allCoupons = await Coupon.find({}).sort({ createdAt: -1 });
-    console.log('🏷️ Live Coupon Saved to MongoDB:', coupon);
     return res.status(201).json({ message: 'Coupon published successfully!', coupons: allCoupons });
   } catch (error) {
     console.error('Coupon Save Error:', error);
@@ -275,7 +248,6 @@ app.post('/api/coupons', protect, authorizeRoles('SuperAdmin'), async (req, res)
   }
 });
 
-// INCREMENT COUPON USAGE COUNT WHEN ORDER PLACED
 app.post('/api/coupons/use', async (req, res) => {
   try {
     const { code } = req.body;
@@ -287,7 +259,6 @@ app.post('/api/coupons/use', async (req, res) => {
     if (coupon) {
       coupon.usedCount = (coupon.usedCount || 0) + 1;
       await coupon.save();
-      console.log(`🎟️ Coupon ${coupon.code} Usage Updated in MongoDB: ${coupon.usedCount}/${coupon.maxUsage}`);
       return res.status(200).json({ message: 'Coupon usage recorded', coupon });
     }
     return res.status(404).json({ message: 'Coupon not found' });
@@ -297,7 +268,6 @@ app.post('/api/coupons/use', async (req, res) => {
   }
 });
 
-// Delete Coupon (ONLY SUPERADMIN)
 app.delete('/api/coupons/:id', protect, authorizeRoles('SuperAdmin'), async (req, res) => {
   try {
     await Coupon.findByIdAndDelete(req.params.id);
