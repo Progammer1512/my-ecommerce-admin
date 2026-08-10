@@ -186,30 +186,25 @@ function App() {
     { name: 'Sun', Revenue: 3490, Orders: 4 },
   ];
 
-  // UPDATED IMAGE UPLOAD HANDLER (FIXED 404 & BASE_URL PARSING)
-  const handleImageFileUpload = async (e, targetSetter) => {
+  // CLIENT-SIDE DIRECT BASE64 IMAGE CONVERTER (PERMANENT 404 FIX)
+  const handleImageFileUpload = (e, targetSetter) => {
     const file = e.target.files[0];
     if (!file) return;
 
-    const formData = new FormData();
-    formData.append('image', file);
-
-    try {
-      const token = localStorage.getItem('adminToken');
-      const res = await axios.post(`${BASE_URL}/api/upload`, formData, {
-        headers: { 
-          'Content-Type': 'multipart/form-data',
-          ...(token ? { Authorization: `Bearer ${token}` } : {})
-        }
-      });
-      if (res.data && res.data.imageUrl) {
-        targetSetter(res.data.imageUrl);
-        alert('📸 Image uploaded successfully!');
-      }
-    } catch (error) {
-      console.error('Image Upload Error:', error);
-      alert('Image upload failed: ' + (error.response?.data?.message || error.message));
+    if (file.size > 5 * 1024 * 1024) {
+      alert('File is too large! Please upload an image under 5MB.');
+      return;
     }
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      targetSetter(reader.result);
+      alert('📸 Image processed and ready!');
+    };
+    reader.onerror = () => {
+      alert('Error reading local file.');
+    };
+    reader.readAsDataURL(file);
   };
 
   // Add Banner Handler
