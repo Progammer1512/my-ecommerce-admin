@@ -2,27 +2,34 @@ const express = require('express');
 const router = express.Router();
 const jwt = require('jsonwebtoken');
 
-// Bulletproof Login Handler for Local Testing
+// Bulletproof Login Handler for Admin Portal
 router.post('/login', (req, res) => {
   const { email, password } = req.body;
 
-  // Accept any of the standard test emails or admin password
-  if (
-    email === 'admin@techstore.com' || 
-    email === 'inventory@techstore.com' || 
-    email === 'staff@techstore.com' ||
-    password === 'adminpassword123' ||
-    password === 'staffpassword123'
-  ) {
-    let role = 'SuperAdmin';
-    let name = 'Super Admin';
+  if (!email || !password) {
+    return res.status(400).json({ message: 'Email and password are required' });
+  }
 
-    if (email === 'inventory@techstore.com') {
-      role = 'InventoryManager';
-      name = 'Inventory Manager';
-    } else if (email === 'staff@techstore.com') {
-      role = 'Staff';
-      name = 'Support Staff';
+  const cleanEmail = email.trim().toLowerCase();
+  const cleanPassword = password.trim();
+
+  // Define valid test accounts
+  const validAccounts = {
+    'admin@techstore.com': { password: 'adminpassword123', role: 'SuperAdmin', name: 'Super Admin' },
+    'inventory@techstore.com': { password: 'adminpassword123', role: 'InventoryManager', name: 'Inventory Manager' },
+    'staff@techstore.com': { password: 'staffpassword123', role: 'Staff', name: 'Support Staff' }
+  };
+
+  // Check if email exists and password matches (or allow global master admin password)
+  const account = validAccounts[cleanEmail];
+  const isMasterPassword = cleanPassword === 'adminpassword123' || cleanPassword === 'staffpassword123';
+
+  if (account || isMasterPassword) {
+    const role = account ? account.role : 'SuperAdmin';
+    const name = account ? account.name : 'Admin User';
+
+    if (account && cleanPassword !== account.password && !isMasterPassword) {
+      return res.status(401).json({ message: 'Invalid email or password' });
     }
 
     const token = jwt.sign(
@@ -34,7 +41,7 @@ router.post('/login', (req, res) => {
     return res.json({
       _id: '123456',
       name,
-      email: email || 'admin@techstore.com',
+      email: cleanEmail,
       role,
       token
     });
