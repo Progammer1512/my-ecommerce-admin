@@ -28,6 +28,9 @@ function App() {
   const [signupPassword, setSignupPassword] = useState('');
   const [signupRole, setSignupRole] = useState('InventoryManager');
 
+  // SIDEBAR TOGGLE STATE (3-LINE MENU)
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+
   const [activeTab, setActiveTab] = useState('dashboard');
   const [products, setProducts] = useState([]);
   const [orders, setOrders] = useState([]);
@@ -68,7 +71,6 @@ function App() {
     return token ? { headers: { Authorization: `Bearer ${token}` } } : {};
   };
 
-  // 🛡️ STRICT ROLE DETECTOR HELPER
   const determineRole = (email, backendRole) => {
     const emailLower = (email || '').toLowerCase();
     if (emailLower.includes('inventory') || emailLower.includes('manager') || emailLower.includes('gf')) {
@@ -102,7 +104,6 @@ function App() {
     }
   }, []);
 
-  // MONGODB CONNECTED LOGIN HANDLER WITH DEBUGGING & FORCE OVERRIDE
   const handleLogin = async (e) => {
     e.preventDefault();
     try {
@@ -110,8 +111,6 @@ function App() {
         email: loginEmail,
         password: loginPassword
       });
-
-      console.log("🔥 BACKEND LOGIN RESPONSE:", response.data);
 
       const resData = response.data || {};
       const token = resData.token || 'mock_token_123';
@@ -142,7 +141,7 @@ function App() {
         setActiveTab('orders');
       }
 
-      alert(`Welcome back, ${loggedUser.name}! Forced Role: ${loggedUser.role}`);
+      alert(`Welcome back, ${loggedUser.name}! Role: ${loggedUser.role}`);
       window.location.reload();
     } catch (error) {
       console.error('Login Error:', error);
@@ -150,7 +149,6 @@ function App() {
     }
   };
 
-  // MONGODB CONNECTED SIGNUP HANDLER
   const handleSignup = async (e) => {
     e.preventDefault();
     try {
@@ -556,66 +554,83 @@ function App() {
   const userRole = user.role || 'SuperAdmin';
 
   return (
-    <div className="d-flex bg-light min-vh-100">
-      <div className="bg-dark text-white p-3 d-flex flex-column" style={{ width: '260px', minHeight: '100vh' }}>
-        <h4 className="text-warning fw-bold mb-1 px-2">
-          <i className="bi bi-speedometer2 me-2"></i>TechStore Admin
-        </h4>
-        <small className="text-muted mb-4 px-2">Role: <span className="badge bg-info text-dark">{userRole}</span></small>
+    <div className="d-flex bg-light min-vh-100 position-relative">
+      
+      {/* 🍔 HAMBURGER TOGGLE BUTTON (3 LINES) FIXED ON TOP LEFT */}
+      <button 
+        className="btn btn-dark position-fixed top-0 start-0 m-2 z-3 d-flex flex-column justify-content-center align-items-center shadow"
+        style={{ width: '40px', height: '40px', borderRadius: '4px', zIndex: 1050 }}
+        onClick={() => setSidebarOpen(!sidebarOpen)}
+        title="Toggle Menu"
+      >
+        <span className="bg-white mb-1" style={{ width: '20px', height: '2px' }}></span>
+        <span className="bg-white mb-1" style={{ width: '20px', height: '2px' }}></span>
+        <span className="bg-white" style={{ width: '20px', height: '2px' }}></span>
+      </button>
 
-        <div className="nav flex-column nav-pills gap-2">
-          {hasTabAccess(userRole, 'dashboard') && (
-            <button className={`nav-link text-start fw-bold ${activeTab === 'dashboard' ? 'active bg-warning text-dark' : 'text-white'}`} onClick={() => setActiveTab('dashboard')}>
-              <i className="bi bi-graph-up-arrow me-2"></i>Analytics Dashboard
-            </button>
-          )}
+      {/* SIDEBAR NAVIGATION */}
+      {sidebarOpen && (
+        <div className="bg-dark text-white p-3 d-flex flex-column" style={{ width: '260px', minHeight: '100vh', transition: '0.3s' }}>
+          <h4 className="text-warning fw-bold mb-1 px-2 pt-2">
+            <i className="bi bi-speedometer2 me-2"></i>TechStore Admin
+          </h4>
+          <small className="text-muted mb-4 px-2">Role: <span className="badge bg-info text-dark">{userRole}</span></small>
 
-          {hasTabAccess(userRole, 'banners') && (
-            <button className={`nav-link text-start fw-bold ${activeTab === 'banners' ? 'active bg-warning text-dark' : 'text-white'}`} onClick={() => setActiveTab('banners')}>
-              <i className="bi bi-images me-2"></i>🎨 Sliding Banners
-            </button>
-          )}
+          <div className="nav flex-column nav-pills gap-2">
+            {hasTabAccess(userRole, 'dashboard') && (
+              <button className={`nav-link text-start fw-bold ${activeTab === 'dashboard' ? 'active bg-warning text-dark' : 'text-white'}`} onClick={() => setActiveTab('dashboard')}>
+                <i className="bi bi-graph-up-arrow me-2"></i>Analytics Dashboard
+              </button>
+            )}
 
-          {hasTabAccess(userRole, 'products') && (
-            <button className={`nav-link text-start fw-bold ${activeTab === 'products' ? 'active bg-warning text-dark' : 'text-white'}`} onClick={() => setActiveTab('products')}>
-              <i className="bi bi-box-seam me-2"></i>Products & Stock
-            </button>
-          )}
+            {hasTabAccess(userRole, 'banners') && (
+              <button className={`nav-link text-start fw-bold ${activeTab === 'banners' ? 'active bg-warning text-dark' : 'text-white'}`} onClick={() => setActiveTab('banners')}>
+                <i className="bi bi-images me-2"></i>🎨 Sliding Banners
+              </button>
+            )}
 
-          {hasTabAccess(userRole, 'orders') && (
-            <button className={`nav-link text-start fw-bold ${activeTab === 'orders' ? 'active bg-warning text-dark' : 'text-white'}`} onClick={() => setActiveTab('orders')}>
-              <i className="bi bi-receipt me-2"></i>Orders & Shipping
-            </button>
-          )}
+            {hasTabAccess(userRole, 'products') && (
+              <button className={`nav-link text-start fw-bold ${activeTab === 'products' ? 'active bg-warning text-dark' : 'text-white'}`} onClick={() => setActiveTab('products')}>
+                <i className="bi bi-box-seam me-2"></i>Products & Stock
+              </button>
+            )}
 
-          {hasTabAccess(userRole, 'returns') && (
-            <button className={`nav-link text-start fw-bold ${activeTab === 'returns' ? 'active bg-warning text-dark' : 'text-white'}`} onClick={() => setActiveTab('returns')}>
-              <i className="bi bi-arrow-counterclockwise me-2"></i>🔄 Return Requests ({returnRequestsCount})
-            </button>
-          )}
+            {hasTabAccess(userRole, 'orders') && (
+              <button className={`nav-link text-start fw-bold ${activeTab === 'orders' ? 'active bg-warning text-dark' : 'text-white'}`} onClick={() => setActiveTab('orders')}>
+                <i className="bi bi-receipt me-2"></i>Orders & Shipping
+              </button>
+            )}
 
-          {hasTabAccess(userRole, 'reviews') && (
-            <button className={`nav-link text-start fw-bold ${activeTab === 'reviews' ? 'active bg-warning text-dark' : 'text-white'}`} onClick={() => setActiveTab('reviews')}>
-              <i className="bi bi-star-fill me-2"></i>⭐ Customer Reviews ({reviews.length})
-            </button>
-          )}
+            {hasTabAccess(userRole, 'returns') && (
+              <button className={`nav-link text-start fw-bold ${activeTab === 'returns' ? 'active bg-warning text-dark' : 'text-white'}`} onClick={() => setActiveTab('returns')}>
+                <i className="bi bi-arrow-counterclockwise me-2"></i>🔄 Return Requests ({returnRequestsCount})
+              </button>
+            )}
 
-          {hasTabAccess(userRole, 'coupons') && (
-            <button className={`nav-link text-start fw-bold ${activeTab === 'coupons' ? 'active bg-warning text-dark' : 'text-white'}`} onClick={() => setActiveTab('coupons')}>
-              <i className="bi bi-ticket-perforated me-2"></i>Marketing & Coupons ({coupons.length})
-            </button>
-          )}
-        </div>
+            {hasTabAccess(userRole, 'reviews') && (
+              <button className={`nav-link text-start fw-bold ${activeTab === 'reviews' ? 'active bg-warning text-dark' : 'text-white'}`} onClick={() => setActiveTab('reviews')}>
+                <i className="bi bi-star-fill me-2"></i>⭐ Customer Reviews ({reviews.length})
+              </button>
+            )}
 
-        <div className="mt-auto pt-3 border-top border-secondary">
-          <div className="d-flex align-items-center justify-content-between">
-            <span className="small fw-bold">{user.name || 'Admin'}</span>
-            <button className="btn btn-outline-danger btn-sm fw-bold" onClick={handleLogout}>Logout</button>
+            {hasTabAccess(userRole, 'coupons') && (
+              <button className={`nav-link text-start fw-bold ${activeTab === 'coupons' ? 'active bg-warning text-dark' : 'text-white'}`} onClick={() => setActiveTab('coupons')}>
+                <i className="bi bi-ticket-perforated me-2"></i>Marketing & Coupons ({coupons.length})
+              </button>
+            )}
+          </div>
+
+          <div className="mt-auto pt-3 border-top border-secondary">
+            <div className="d-flex align-items-center justify-content-between">
+              <span className="small fw-bold">{user.name || 'Admin'}</span>
+              <button className="btn btn-outline-danger btn-sm fw-bold" onClick={handleLogout}>Logout</button>
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
-      <div className="flex-grow-1 p-4 overflow-auto" style={{ maxHeight: '100vh' }}>
+      {/* MAIN CONTENT AREA */}
+      <div className="flex-grow-1 p-4 overflow-auto pt-5" style={{ maxHeight: '100vh', paddingLeft: sidebarOpen ? '20px' : '60px' }}>
         
         {activeTab === 'dashboard' && hasTabAccess(userRole, 'dashboard') && (
           <div>
