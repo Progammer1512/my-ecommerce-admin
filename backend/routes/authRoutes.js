@@ -20,12 +20,20 @@ router.post('/signup', async (req, res) => {
       return res.status(400).json({ message: 'User already exists with this email!' });
     }
 
-    // Create new user with selected role (default to Staff if not provided)
+    // Determine role and sanitize it properly to match User schema enum
+    let assignedRole = role ? role.trim() : 'Staff';
+    
+    // Fallback normalization just in case
+    if (assignedRole.toLowerCase() === 'inventorymanager') assignedRole = 'InventoryManager';
+    else if (assignedRole.toLowerCase() === 'staff') assignedRole = 'Staff';
+    else if (assignedRole.toLowerCase() === 'superadmin') assignedRole = 'SuperAdmin';
+
+    // Create new user with selected role
     const newUser = new User({
       name: name.trim(),
       email: cleanEmail,
-      password: password.trim(), // Note: For high security, hash this using bcrypt later
-      role: role || 'Staff'
+      password: password.trim(), 
+      role: assignedRole
     });
 
     await newUser.save();
@@ -62,14 +70,17 @@ router.post('/login', async (req, res) => {
       return res.status(401).json({ message: 'Invalid email or password' });
     }
 
-    // Verify password (direct check since passwords are stored plain text for now)
+    // Verify password
     if (user.password !== cleanPassword) {
       return res.status(401).json({ message: 'Invalid email or password' });
     }
 
+    // Ensure role is never null or undefined
+    const finalRole = user.role || 'SuperAdmin';
+
     // Generate JWT Token with actual database user id and role
     const token = jwt.sign(
-      { id: user._id, role: user.role }, 
+      { id: user._id, role: finalRole }, 
       process.env.JWT_SECRET || 'supersecretkey123', 
       { expiresIn: '30d' }
     );
@@ -78,7 +89,7 @@ router.post('/login', async (req, res) => {
       _id: user._id,
       name: user.name,
       email: user.email,
-      role: user.role,
+      role: finalRole,
       token
     });
   } catch (error) {
