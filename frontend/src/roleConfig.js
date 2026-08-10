@@ -19,6 +19,15 @@ export const hasTabAccess = (userRole, tabName) => {
   if (!userRole) return false;
   const cleanRole = userRole.toString().toLowerCase().replace(/\s+/g, '');
   
+  // 🛑 Force check for Inventory Manager variations
+  if (cleanRole.includes('inventory') || cleanRole.includes('manager')) {
+    return ['products', 'orders'].includes(tabName);
+  }
+  // 🛑 Force check for Staff variations
+  if (cleanRole.includes('staff') || cleanRole.includes('support')) {
+    return ['orders', 'returns'].includes(tabName);
+  }
+
   for (const [key, config] of Object.entries(ROLE_PERMISSIONS)) {
     if (key.toLowerCase() === cleanRole) {
       return config.allowedTabs.includes(tabName);
