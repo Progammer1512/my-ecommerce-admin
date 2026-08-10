@@ -108,7 +108,13 @@ function App() {
 
       const orderRes = await axios.get(`${BASE_URL}/api/orders`, authConfig);
       const fetchedOrders = Array.isArray(orderRes.data) ? orderRes.data : (orderRes.data.orders || []);
-      setOrders(fetchedOrders);
+      
+      // Ensure every order has a fallback ID so it never crashes
+      const sanitizedOrders = fetchedOrders.map((ord, idx) => ({
+        ...ord,
+        _id: ord._id || ord.id || ord.orderId || `LOCAL_ID_${idx}`
+      }));
+      setOrders(sanitizedOrders);
 
       const bannerRes = await axios.get(`${BASE_URL}/api/banners`, authConfig);
       setBanners(Array.isArray(bannerRes.data) ? bannerRes.data : []);
@@ -158,8 +164,7 @@ function App() {
     let searchMatch = true;
     if (orderSearchTerm.trim()) {
       const cleanTerm = orderSearchTerm.trim().toLowerCase();
-      // SAFE ID MATCHING
-      const orderIdMatch = (o._id || o.id || o.orderId || '').toLowerCase().includes(cleanTerm);
+      const orderIdMatch = (o._id || '').toLowerCase().includes(cleanTerm);
       const nameMatch = (o.shippingAddress?.name || '').toLowerCase().includes(cleanTerm);
       const emailMatch = (o.userEmail || '').toLowerCase().includes(cleanTerm);
       searchMatch = orderIdMatch || nameMatch || emailMatch;
@@ -341,10 +346,10 @@ function App() {
     setShowCustomCategory(false);
   };
 
-  // 🚀 BULLETPROOF SAFE ORDER ID EXTRACTION FOR STATUS UPDATES
+  // 🚀 BULLETPROOF SAFE ORDER STATUS UPDATE
   const handleOrderStatusChange = async (orderId, newStatus) => {
-    if (!orderId || orderId === 'undefined' || orderId === 'null') {
-      alert('Error: Is Order ki ID missing hai. Sync Live Orders button par click karke page refresh karein.');
+    if (!orderId || orderId.startsWith('LOCAL_ID_')) {
+      alert('⚠️ Yeh order purana local/dummy order hai jo Database mein registered nahi hai. Kripya Customer site se ek naya Order Place karein.');
       return;
     }
     
@@ -833,7 +838,6 @@ function App() {
                     </tr>
                   ) : (
                     filteredOrders.map((o, idx) => {
-                      // ABSOLUTE SAFE ID RESOLUTION FROM OBJECT
                       const orderId = o._id || o.id || o.orderId || null;
 
                       return (
@@ -863,8 +867,8 @@ function App() {
                             className="form-select form-select-sm fw-bold" 
                             value={o.status || 'Processing'}
                             onChange={(e) => {
-                              if (!orderId) {
-                                alert("Is order ki ID missing hai. Sync Live Orders button daba kar refresh karein.");
+                              if (!orderId || orderId.startsWith('LOCAL_ID_')) {
+                                alert("Yeh order database me nahi hai. Kripya naya order place karein.");
                                 return;
                               }
                               handleOrderStatusChange(orderId, e.target.value);
@@ -950,8 +954,8 @@ function App() {
                             className="form-select form-select-sm fw-bold border-danger" 
                             value={o.status}
                             onChange={(e) => {
-                              if (!orderId) {
-                                alert("Is order ki ID missing hai.");
+                              if (!orderId || orderId.startsWith('LOCAL_ID_')) {
+                                alert("Yeh order database me nahi hai.");
                                 return;
                               }
                               handleOrderStatusChange(orderId, e.target.value);
