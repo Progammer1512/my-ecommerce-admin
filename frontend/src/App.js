@@ -68,16 +68,26 @@ function App() {
     return token ? { headers: { Authorization: `Bearer ${token}` } } : {};
   };
 
+  // 🛡️ STRICT ROLE DETECTOR HELPER
+  const determineRole = (email, backendRole) => {
+    const emailLower = (email || '').toLowerCase();
+    if (emailLower.includes('inventory') || emailLower.includes('manager') || emailLower.includes('gf')) {
+      return 'InventoryManager';
+    }
+    if (emailLower.includes('staff') || emailLower.includes('support')) {
+      return 'Staff';
+    }
+    if (backendRole && backendRole.toLowerCase().includes('inventory')) return 'InventoryManager';
+    if (backendRole && backendRole.toLowerCase().includes('staff')) return 'Staff';
+    return backendRole || 'SuperAdmin';
+  };
+
   useEffect(() => {
     const savedUser = localStorage.getItem('adminUser');
     if (savedUser) {
       try {
         const parsedUser = JSON.parse(savedUser);
-        let userRole = parsedUser.role || 'SuperAdmin';
-        
-        const emailLower = (parsedUser.email || '').toLowerCase();
-        if (emailLower.includes('inventory') || emailLower.includes('gf') || emailLower.includes('manager')) userRole = 'InventoryManager';
-        else if (emailLower.includes('staff') || emailLower.includes('support')) userRole = 'Staff';
+        const userRole = determineRole(parsedUser.email, parsedUser.role);
 
         setUser({ ...parsedUser, role: userRole });
 
@@ -92,7 +102,7 @@ function App() {
     }
   }, []);
 
-  // MONGODB CONNECTED LOGIN HANDLER WITH STRICT ROLE FIXER
+  // MONGODB CONNECTED LOGIN HANDLER WITH DEBUGGING & FORCE OVERRIDE
   const handleLogin = async (e) => {
     e.preventDefault();
     try {
@@ -101,20 +111,13 @@ function App() {
         password: loginPassword
       });
 
+      console.log("🔥 BACKEND LOGIN RESPONSE:", response.data);
+
       const resData = response.data || {};
       const token = resData.token || 'mock_token_123';
       const userData = resData.user || resData;
-      let actualRole = userData.role || resData.role;
-
-      // 🔍 SMART OVERRIDE: Email patterns ya database role ke hisab se exact role assign karna
-      const emailLower = loginEmail.toLowerCase();
-      if (emailLower.includes('inventory') || emailLower.includes('gf') || emailLower.includes('manager')) {
-        actualRole = 'InventoryManager';
-      } else if (emailLower.includes('staff') || emailLower.includes('support')) {
-        actualRole = 'Staff';
-      } else if (!actualRole) {
-        actualRole = 'SuperAdmin';
-      }
+      
+      const actualRole = determineRole(loginEmail, userData.role || resData.role);
 
       const loggedUser = {
         _id: userData._id || userData.id || 'admin_id_123',
@@ -139,7 +142,7 @@ function App() {
         setActiveTab('orders');
       }
 
-      alert(`Welcome back, ${loggedUser.name}! Assigned Role: ${loggedUser.role}`);
+      alert(`Welcome back, ${loggedUser.name}! Forced Role: ${loggedUser.role}`);
       window.location.reload();
     } catch (error) {
       console.error('Login Error:', error);
@@ -147,7 +150,7 @@ function App() {
     }
   };
 
-  // MONGODB CONNECTED SIGNUP HANDLER (Fixed to send selected role properly)
+  // MONGODB CONNECTED SIGNUP HANDLER
   const handleSignup = async (e) => {
     e.preventDefault();
     try {
@@ -155,7 +158,7 @@ function App() {
         name: signupName,
         email: signupEmail,
         password: signupPassword,
-        role: signupRole // Yahin se role database me jayega
+        role: signupRole
       });
 
       alert(response.data.message || 'Signup successful! Please login now.');
