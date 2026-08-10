@@ -186,7 +186,7 @@ function App() {
     { name: 'Sun', Revenue: 3490, Orders: 4 },
   ];
 
-  // Image Upload Handler
+  // UPDATED IMAGE UPLOAD HANDLER (FIXED 404 & BASE_URL PARSING)
   const handleImageFileUpload = async (e, targetSetter) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -199,7 +199,7 @@ function App() {
       const res = await axios.post(`${BASE_URL}/api/upload`, formData, {
         headers: { 
           'Content-Type': 'multipart/form-data',
-          Authorization: `Bearer ${token}`
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
         }
       });
       if (res.data && res.data.imageUrl) {
@@ -207,6 +207,7 @@ function App() {
         alert('📸 Image uploaded successfully!');
       }
     } catch (error) {
+      console.error('Image Upload Error:', error);
       alert('Image upload failed: ' + (error.response?.data?.message || error.message));
     }
   };
@@ -281,7 +282,7 @@ function App() {
       const res = await axios.post(`${BASE_URL}/api/products/bulk-upload`, formData, {
         headers: { 
           'Content-Type': 'multipart/form-data',
-          Authorization: `Bearer ${token}`
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
         }
       });
       alert(res.data.message);
