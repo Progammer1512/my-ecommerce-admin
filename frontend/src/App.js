@@ -186,28 +186,36 @@ function App() {
     { name: 'Sun', Revenue: 3490, Orders: 4 },
   ];
 
-  // CLIENT-SIDE DIRECT BASE64 IMAGE CONVERTER (100% RELIABLE)
+  // AUTOMATIC CLIENT-SIDE IMAGE COMPRESSOR (PREVENTS NETWORK & PAYLOAD ERRORS)
   const handleImageFileUpload = (e, targetSetter) => {
     const file = e.target.files[0];
     if (!file) return;
 
-    if (file.size > 5 * 1024 * 1024) {
-      alert('File is too large! Please upload an image under 5MB.');
-      return;
-    }
-
     const reader = new FileReader();
-    reader.onloadend = () => {
-      targetSetter(reader.result);
-      alert('📸 Image processed and ready to publish!');
-    };
-    reader.onerror = () => {
-      alert('Error reading local file.');
-    };
     reader.readAsDataURL(file);
+    reader.onload = (event) => {
+      const img = new Image();
+      img.src = event.target.result;
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const MAX_WIDTH = 1000; // Resizes heavy images to max 1000px width
+        const scale = MAX_WIDTH / img.width;
+        
+        canvas.width = scale < 1 ? MAX_WIDTH : img.width;
+        canvas.height = scale < 1 ? img.height * scale : img.height;
+
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        
+        // Compress image quality to lightweight 70% JPEG
+        const compressedBase64 = canvas.toDataURL('image/jpeg', 0.7);
+        targetSetter(compressedBase64);
+        alert('📸 Image compressed and attached successfully!');
+      };
+    };
   };
 
-  // Add Banner Handler (Fixed Auth & Base64 Payload Handling)
+  // Add Banner Handler
   const handleAddBanner = async (e) => {
     e.preventDefault();
     if (!bannerTitle || !bannerImage) return alert('Title and Image are required!');
