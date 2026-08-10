@@ -27,8 +27,9 @@ function App() {
   const [signupEmail, setSignupEmail] = useState('');
   const [signupPassword, setSignupPassword] = useState('');
   const [signupRole, setSignupRole] = useState('InventoryManager');
+  const [signupSecretCode, setSignupSecretCode] = useState(''); // 🔒 Secret code state
 
-  // SIDEBAR TOGGLE STATE (DEFAULT FALSE RAKHA HAI TAAKI PEHLE BAND AAYE)
+  // SIDEBAR TOGGLE STATE (DEFAULT FALSE)
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -149,6 +150,21 @@ function App() {
     }
   };
 
+  // 🔒 SECURE SIGNUP TRIGGER WITH PROMPT
+  const handleOpenSignup = () => {
+    const enteredCode = prompt("🔒 Enter Admin Security Secret Code to Access Signup:");
+    if (enteredCode === null) return; // Cancelled
+
+    // Yahan hum default code 'TechStoreSecret999' check kar rahe hain (jo backend me bhi set hai)
+    if (enteredCode.trim() === 'TechStoreSecret999') {
+      setIsSignup(true);
+      setSignupSecretCode(enteredCode.trim());
+    } else {
+      alert("❌ Access Denied: Incorrect Secret Code!");
+    }
+  };
+
+  // MONGODB CONNECTED SIGNUP HANDLER WITH SECRET CODE
   const handleSignup = async (e) => {
     e.preventDefault();
     try {
@@ -156,7 +172,8 @@ function App() {
         name: signupName,
         email: signupEmail,
         password: signupPassword,
-        role: signupRole
+        role: signupRole,
+        secretCode: signupSecretCode // Sending secret code to backend
       });
 
       alert(response.data.message || 'Signup successful! Please login now.');
@@ -165,6 +182,7 @@ function App() {
       setSignupName('');
       setSignupEmail('');
       setSignupPassword('');
+      setSignupSecretCode('');
     } catch (error) {
       console.error('Signup Error:', error);
       alert('Signup Failed: ' + (error.response?.data?.message || 'Something went wrong!'));
@@ -510,7 +528,7 @@ function App() {
               </div>
               <button type="submit" className="btn btn-primary w-100 fw-bold py-2 mb-3">Login to Portal</button>
               <div className="text-center">
-                <button type="button" className="btn btn-link text-decoration-none small" onClick={() => setIsSignup(true)}>
+                <button type="button" className="btn btn-link text-decoration-none small" onClick={handleOpenSignup}>
                   Don't have an account? <b>Sign Up here</b>
                 </button>
               </div>
