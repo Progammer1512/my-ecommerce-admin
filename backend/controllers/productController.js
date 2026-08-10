@@ -17,8 +17,7 @@ exports.createProduct = async (req, res) => {
   try {
     const { name, price, category, description, image, stock } = req.body;
     
-    // 🔧 FIXED: Exact stock check taaki 0 ya chote numbers (jaise 2) override na hon
-    const finalStock = stock !== undefined && stock !== '' ? Number(stock) : 10;
+    const finalStock = !isNaN(Number(stock)) ? Number(stock) : 10;
 
     const product = new Product({
       name,
@@ -42,12 +41,16 @@ exports.updateProduct = async (req, res) => {
     const product = await Product.findById(req.params.id);
 
     if (product) {
-      product.name = name || product.name;
-      product.price = price || product.price;
-      product.category = category || product.category;
-      product.description = description || product.description;
-      product.image = image || product.image;
-      product.stock = stock !== undefined && stock !== '' ? Number(stock) : product.stock;
+      product.name = name !== undefined ? name : product.name;
+      product.price = price !== undefined ? Number(price) : product.price;
+      product.category = category !== undefined ? category : product.category;
+      product.description = description !== undefined ? description : product.description;
+      product.image = image !== undefined ? image : product.image;
+      
+      // 🔧 STRICT FIX: Ensure stock updates properly even if it is 0
+      if (stock !== undefined && stock !== '' && !isNaN(Number(stock))) {
+        product.stock = Number(stock);
+      }
 
       const updatedProduct = await product.save();
       res.json(updatedProduct);
@@ -81,7 +84,7 @@ exports.bulkUploadProducts = async (req, res) => {
   fs.createReadStream(filePath)
     .pipe(csv())
     .on('data', (row) => {
-      const parsedStock = row.stock !== undefined && row.stock !== '' ? Number(row.stock) : 10;
+      const parsedStock = !isNaN(Number(row.stock)) ? Number(row.stock) : 10;
       products.push({
         name: row.name,
         price: Number(row.price),
