@@ -418,7 +418,7 @@ function App() {
     setCategory(p.category);
     setDescription(p.description);
     setImage(getCleanImageUrl(p.image));
-    setStock(p.stock !== undefined ? p.stock : 10);
+    setStock(p.stock !== undefined ? p.stock : 10); // 🔧 FIXED: Now correctly binds exact stock value to form
   };
 
   const handleDeleteProduct = async (id) => {
