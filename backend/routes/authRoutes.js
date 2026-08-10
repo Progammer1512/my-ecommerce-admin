@@ -1,53 +1,89 @@
 const express = require('express');
 const router = express.Router();
 const jwt = require('jsonwebtoken');
+const User = require('../models/User'); // User model import kar liya
 
-// Bulletproof Login Handler for Admin Portal
-router.post('/login', (req, res) => {
-  const { email, password } = req.body;
+// 1. SIGNUP ROUTE (Database mein naya admin/staff register karne ke liye)
+router.post('/signup', async (req, res) => {
+  try {
+    const { name, email, password, role } = req.body;
 
-  if (!email || !password) {
-    return res.status(400).json({ message: 'Email and password are required' });
+    if (!name || !email || !password) {
+      return res.status(400).json({ message: 'Name, email, and password are required' });
+    }
+
+    const cleanEmail = email.trim().toLowerCase();
+    
+    // Check if user already exists
+    const existingUser = await User.findOne({ email: cleanEmail });
+    if (existingUser) {
+      return res.status(400).json({ message: 'User already exists with this email!' });
+    }
+
+    // Create new user with selected role (default to Staff if not provided)
+    const newUser = new User({
+      name: name.trim(),
+      email: cleanEmail,
+      password: password.trim(), // Note: For high security, hash this using bcrypt later
+      role: role || 'Staff'
+    });
+
+    await newUser.save();
+
+    return res.status(201).json({ 
+      message: 'Admin/Staff registered successfully!', 
+      user: {
+        id: newUser._id,
+        name: newUser.name,
+        email: newUser.email,
+        role: newUser.role
+      }
+    });
+  } catch (error) {
+    return res.status(500).json({ message: 'Signup error: ' + error.message });
   }
+});
 
-  const cleanEmail = email.trim().toLowerCase();
-  const cleanPassword = password.trim();
+// 2. LOGIN ROUTE (MongoDB Database se verify karne ke liye)
+router.post('/login', async (req, res) => {
+  try {
+    const { email, password } = req.body;
 
-  // Define valid test accounts
-  const validAccounts = {
-    'admin@techstore.com': { password: 'adminpassword123', role: 'SuperAdmin', name: 'Super Admin' },
-    'inventory@techstore.com': { password: 'adminpassword123', role: 'InventoryManager', name: 'Inventory Manager' },
-    'staff@techstore.com': { password: 'staffpassword123', role: 'Staff', name: 'Support Staff' }
-  };
+    if (!email || !password) {
+      return res.status(400).json({ message: 'Email and password are required' });
+    }
 
-  // Check if email exists and password matches (or allow global master admin password)
-  const account = validAccounts[cleanEmail];
-  const isMasterPassword = cleanPassword === 'adminpassword123' || cleanPassword === 'staffpassword123';
+    const cleanEmail = email.trim().toLowerCase();
+    const cleanPassword = password.trim();
 
-  if (account || isMasterPassword) {
-    const role = account ? account.role : 'SuperAdmin';
-    const name = account ? account.name : 'Admin User';
-
-    if (account && cleanPassword !== account.password && !isMasterPassword) {
+    // Find user in MongoDB database
+    const user = await User.findOne({ email: cleanEmail });
+    if (!user) {
       return res.status(401).json({ message: 'Invalid email or password' });
     }
 
+    // Verify password (direct check since passwords are stored plain text for now)
+    if (user.password !== cleanPassword) {
+      return res.status(401).json({ message: 'Invalid email or password' });
+    }
+
+    // Generate JWT Token with actual database user id and role
     const token = jwt.sign(
-      { id: '123456', role }, 
+      { id: user._id, role: user.role }, 
       process.env.JWT_SECRET || 'supersecretkey123', 
       { expiresIn: '30d' }
     );
 
     return res.json({
-      _id: '123456',
-      name,
-      email: cleanEmail,
-      role,
+      _id: user._id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
       token
     });
+  } catch (error) {
+    return res.status(500).json({ message: 'Login error: ' + error.message });
   }
-
-  return res.status(401).json({ message: 'Invalid email or password' });
 });
 
 module.exports = router;
