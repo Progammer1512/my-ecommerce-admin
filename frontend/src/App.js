@@ -75,14 +75,12 @@ function App() {
         const parsedUser = JSON.parse(savedUser);
         let userRole = parsedUser.role || 'SuperAdmin';
         
-        // Smart Override based on email stored in localStorage
         const emailLower = (parsedUser.email || '').toLowerCase();
-        if (emailLower.includes('inventory')) userRole = 'InventoryManager';
+        if (emailLower.includes('inventory') || emailLower.includes('gf')) userRole = 'InventoryManager';
         else if (emailLower.includes('staff') || emailLower.includes('support')) userRole = 'Staff';
 
         setUser({ ...parsedUser, role: userRole });
 
-        // Auto-adjust active tab if user doesn't have access to current tab
         if (!hasTabAccess(userRole, activeTab)) {
           if (hasTabAccess(userRole, 'orders')) setActiveTab('orders');
           else if (hasTabAccess(userRole, 'products')) setActiveTab('products');
@@ -94,7 +92,7 @@ function App() {
     }
   }, []);
 
-  // MONGODB CONNECTED LOGIN HANDLER WITH SMART ROLE OVERRIDE
+  // MONGODB CONNECTED LOGIN HANDLER WITH STRICT ROLE OVERRIDE
   const handleLogin = async (e) => {
     e.preventDefault();
     try {
@@ -106,14 +104,16 @@ function App() {
       const resData = response.data || {};
       const token = resData.token || 'mock_token_123';
       const userData = resData.user || resData;
-      let actualRole = userData.role || resData.role || 'SuperAdmin';
+      let actualRole = userData.role || resData.role;
 
-      // 🔍 Smart Override: Email ke hisab se role fix karna taaki database ki galti bhi theek ho jaye
+      // 🔍 SMART OVERRIDE: Check email patterns to assign correct role directly
       const emailLower = loginEmail.toLowerCase();
-      if (emailLower.includes('inventory')) {
+      if (emailLower.includes('inventory') || emailLower.includes('gf') || emailLower.includes('manager')) {
         actualRole = 'InventoryManager';
       } else if (emailLower.includes('staff') || emailLower.includes('support')) {
         actualRole = 'Staff';
+      } else if (!actualRole) {
+        actualRole = 'SuperAdmin';
       }
 
       const loggedUser = {
@@ -123,7 +123,6 @@ function App() {
         role: actualRole
       };
 
-      // Clear old session storage to prevent role caching issues
       localStorage.removeItem('adminToken');
       localStorage.removeItem('adminUser');
 
@@ -132,7 +131,6 @@ function App() {
       
       setUser(loggedUser);
 
-      // Set default tab based on role permissions
       if (hasTabAccess(loggedUser.role, 'dashboard')) {
         setActiveTab('dashboard');
       } else if (hasTabAccess(loggedUser.role, 'products')) {
@@ -141,7 +139,7 @@ function App() {
         setActiveTab('orders');
       }
 
-      alert(`Welcome back, ${loggedUser.name}! (${loggedUser.role})`);
+      alert(`Welcome back, ${loggedUser.name}! Assigned Role: ${loggedUser.role}`);
       window.location.reload();
     } catch (error) {
       console.error('Login Error:', error);
