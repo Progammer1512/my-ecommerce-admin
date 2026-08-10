@@ -159,7 +159,7 @@ function App() {
     if (orderSearchTerm.trim()) {
       const cleanTerm = orderSearchTerm.trim().toLowerCase();
       // SAFE ID MATCHING
-      const orderIdMatch = (o._id || o.id || '').toLowerCase().includes(cleanTerm);
+      const orderIdMatch = (o._id || o.id || o.orderId || '').toLowerCase().includes(cleanTerm);
       const nameMatch = (o.shippingAddress?.name || '').toLowerCase().includes(cleanTerm);
       const emailMatch = (o.userEmail || '').toLowerCase().includes(cleanTerm);
       searchMatch = orderIdMatch || nameMatch || emailMatch;
@@ -341,10 +341,10 @@ function App() {
     setShowCustomCategory(false);
   };
 
-  // 🚀 FIXED: SAFE ORDER ID EXTRACTION FOR STATUS UPDATES
+  // 🚀 BULLETPROOF SAFE ORDER ID EXTRACTION FOR STATUS UPDATES
   const handleOrderStatusChange = async (orderId, newStatus) => {
-    if (!orderId || orderId === 'undefined') {
-      alert('Error: Missing Order ID! Update cannot be processed for invalid orders.');
+    if (!orderId || orderId === 'undefined' || orderId === 'null') {
+      alert('Error: Is Order ki ID missing hai. Sync Live Orders button par click karke page refresh karein.');
       return;
     }
     
@@ -832,11 +832,13 @@ function App() {
                       </td>
                     </tr>
                   ) : (
-                    filteredOrders.map((o) => {
-                      const orderId = o._id || o.id;
+                    filteredOrders.map((o, idx) => {
+                      // ABSOLUTE SAFE ID RESOLUTION FROM OBJECT
+                      const orderId = o._id || o.id || o.orderId || null;
+
                       return (
-                      <tr key={orderId}>
-                        <td className="fw-bold text-primary">#{orderId}</td>
+                      <tr key={orderId || idx}>
+                        <td className="fw-bold text-primary">#{orderId ? orderId : 'N/A'}</td>
                         <td className="fw-bold">
                           {o.shippingAddress?.name || 'Customer'}
                           {o.userEmail && <small className="text-muted d-block">{o.userEmail}</small>}
@@ -860,7 +862,13 @@ function App() {
                           <select 
                             className="form-select form-select-sm fw-bold" 
                             value={o.status || 'Processing'}
-                            onChange={(e) => handleOrderStatusChange(orderId, e.target.value)}
+                            onChange={(e) => {
+                              if (!orderId) {
+                                alert("Is order ki ID missing hai. Sync Live Orders button daba kar refresh karein.");
+                                return;
+                              }
+                              handleOrderStatusChange(orderId, e.target.value);
+                            }}
                           >
                             <option value="Pending">Pending</option>
                             <option value="Processing">Processing</option>
@@ -914,11 +922,11 @@ function App() {
                       </td>
                     </tr>
                   ) : (
-                    orders.filter(o => o.status && o.status.includes('Return')).map((o) => {
-                      const orderId = o._id || o.id;
+                    orders.filter(o => o.status && o.status.includes('Return')).map((o, idx) => {
+                      const orderId = o._id || o.id || o.orderId || null;
                       return (
-                      <tr key={orderId}>
-                        <td className="fw-bold text-primary">#{orderId}</td>
+                      <tr key={orderId || idx}>
+                        <td className="fw-bold text-primary">#{orderId ? orderId : 'N/A'}</td>
                         <td className="fw-bold">
                           {o.shippingAddress?.name || 'Customer'}
                           <small className="text-muted d-block">{o.userEmail}</small>
@@ -941,7 +949,13 @@ function App() {
                           <select 
                             className="form-select form-select-sm fw-bold border-danger" 
                             value={o.status}
-                            onChange={(e) => handleOrderStatusChange(orderId, e.target.value)}
+                            onChange={(e) => {
+                              if (!orderId) {
+                                alert("Is order ki ID missing hai.");
+                                return;
+                              }
+                              handleOrderStatusChange(orderId, e.target.value);
+                            }}
                           >
                             <option value={o.status}>-- Action --</option>
                             <option value="Return Approved">✅ Approve Return Request</option>
