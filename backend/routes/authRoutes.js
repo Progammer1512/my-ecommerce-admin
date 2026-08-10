@@ -3,13 +3,19 @@ const router = express.Router();
 const jwt = require('jsonwebtoken');
 const User = require('../models/User'); // User model import kar liya
 
-// 1. SIGNUP ROUTE (Database mein naya admin/staff register karne ke liye)
+// 1. SIGNUP ROUTE (Database mein naya admin/staff register karne ke liye - Secured with Secret Code)
 router.post('/signup', async (req, res) => {
   try {
-    const { name, email, password, role } = req.body;
+    const { name, email, password, role, secretCode } = req.body;
 
     if (!name || !email || !password) {
       return res.status(400).json({ message: 'Name, email, and password are required' });
+    }
+
+    // 🔒 SECURITY CHECK: Secret Password Verify karna zaroori hai
+    const ADMIN_SECRET_KEY = process.env.ADMIN_SIGNUP_SECRET || 'iamthebest~$@%^&15121';
+    if (!secretCode || secretCode.trim() !== ADMIN_SECRET_KEY) {
+      return res.status(403).json({ message: 'Access Denied: Invalid or missing Admin Secret Code!' });
     }
 
     const cleanEmail = email.trim().toLowerCase();
