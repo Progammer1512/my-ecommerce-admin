@@ -20,7 +20,7 @@ function App() {
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
   
-  // 🚀 NEW SIGNUP STATES ADDED
+  // SIGNUP STATES
   const [isSignup, setIsSignup] = useState(false);
   const [signupName, setSignupName] = useState('');
   const [signupEmail, setSignupEmail] = useState('');
@@ -70,11 +70,19 @@ function App() {
   useEffect(() => {
     const savedUser = localStorage.getItem('adminUser');
     if (savedUser) {
-      setUser(JSON.parse(savedUser));
+      const parsedUser = JSON.parse(savedUser);
+      setUser(parsedUser);
+      
+      // Auto-adjust default active tab based on role if unauthorized
+      if (parsedUser.role === 'InventoryManager' && !['products', 'orders'].includes(activeTab)) {
+        setActiveTab('products');
+      } else if (parsedUser.role === 'Staff' && !['orders', 'returns'].includes(activeTab)) {
+        setActiveTab('orders');
+      }
     }
   }, []);
 
-  // 🚀 MONGODB CONNECTED LOGIN HANDLER
+  // MONGODB CONNECTED LOGIN HANDLER
   const handleLogin = async (e) => {
     e.preventDefault();
     try {
@@ -90,6 +98,12 @@ function App() {
       localStorage.setItem('adminUser', JSON.stringify(loggedUser));
       
       setUser(loggedUser);
+      
+      // Set default tab based on role
+      if (role === 'InventoryManager') setActiveTab('products');
+      else if (role === 'Staff') setActiveTab('orders');
+      else setActiveTab('dashboard');
+
       alert(`Welcome back, ${loggedUser.name}! (${loggedUser.role})`);
     } catch (error) {
       console.error('Login Error:', error);
@@ -97,7 +111,7 @@ function App() {
     }
   };
 
-  // 🚀 MONGODB CONNECTED SIGNUP HANDLER
+  // MONGODB CONNECTED SIGNUP HANDLER
   const handleSignup = async (e) => {
     e.preventDefault();
     try {
@@ -109,7 +123,7 @@ function App() {
       });
 
       alert(response.data.message || 'Signup successful! Please login now.');
-      setIsSignup(false); // Switch back to login view
+      setIsSignup(false);
       setLoginEmail(signupEmail);
       setSignupName('');
       setSignupEmail('');
@@ -446,7 +460,6 @@ function App() {
             <p className="text-muted small">Admin & Staff Access Guard</p>
           </div>
 
-          {/* TOGGLE BETWEEN LOGIN & SIGNUP */}
           {!isSignup ? (
             <form onSubmit={handleLogin}>
               <div className="mb-3">
@@ -509,32 +522,56 @@ function App() {
         <small className="text-muted mb-4 px-2">Role: <span className="badge bg-info text-dark">{user.role}</span></small>
 
         <div className="nav flex-column nav-pills gap-2">
-          <button className={`nav-link text-start fw-bold ${activeTab === 'dashboard' ? 'active bg-warning text-dark' : 'text-white'}`} onClick={() => setActiveTab('dashboard')}>
-            <i className="bi bi-graph-up-arrow me-2"></i>Analytics Dashboard
-          </button>
-          <button className={`nav-link text-start fw-bold ${activeTab === 'banners' ? 'active bg-warning text-dark' : 'text-white'}`} onClick={() => setActiveTab('banners')}>
-            <i className="bi bi-images me-2"></i>🎨 Sliding Banners
-          </button>
-          <button className={`nav-link text-start fw-bold ${activeTab === 'products' ? 'active bg-warning text-dark' : 'text-white'}`} onClick={() => setActiveTab('products')}>
-            <i className="bi bi-box-seam me-2"></i>Products & Stock
-          </button>
-          <button className={`nav-link text-start fw-bold ${activeTab === 'orders' ? 'active bg-warning text-dark' : 'text-white'}`} onClick={() => setActiveTab('orders')}>
-            <i className="bi bi-receipt me-2"></i>Orders & Shipping
-          </button>
+          
+          {/* SUPERADMIN ONLY: Analytics Dashboard */}
+          {user.role === 'SuperAdmin' && (
+            <button className={`nav-link text-start fw-bold ${activeTab === 'dashboard' ? 'active bg-warning text-dark' : 'text-white'}`} onClick={() => setActiveTab('dashboard')}>
+              <i className="bi bi-graph-up-arrow me-2"></i>Analytics Dashboard
+            </button>
+          )}
 
-          <button className={`nav-link text-start fw-bold ${activeTab === 'returns' ? 'active bg-warning text-dark' : 'text-white'}`} onClick={() => setActiveTab('returns')}>
-            <i className="bi bi-arrow-counterclockwise me-2"></i>🔄 Return Requests ({returnRequestsCount})
-          </button>
+          {/* SUPERADMIN ONLY: Sliding Banners */}
+          {user.role === 'SuperAdmin' && (
+            <button className={`nav-link text-start fw-bold ${activeTab === 'banners' ? 'active bg-warning text-dark' : 'text-white'}`} onClick={() => setActiveTab('banners')}>
+              <i className="bi bi-images me-2"></i>🎨 Sliding Banners
+            </button>
+          )}
 
-          <button className={`nav-link text-start fw-bold ${activeTab === 'reviews' ? 'active bg-warning text-dark' : 'text-white'}`} onClick={() => setActiveTab('reviews')}>
-            <i className="bi bi-star-fill me-2"></i>⭐ Customer Reviews ({reviews.length})
-          </button>
+          {/* SUPERADMIN & INVENTORY MANAGER: Products & Stock */}
+          {['SuperAdmin', 'InventoryManager'].includes(user.role) && (
+            <button className={`nav-link text-start fw-bold ${activeTab === 'products' ? 'active bg-warning text-dark' : 'text-white'}`} onClick={() => setActiveTab('products')}>
+              <i className="bi bi-box-seam me-2"></i>Products & Stock
+            </button>
+          )}
 
-          {['SuperAdmin', 'admin'].includes(user.role) && (
+          {/* ALL ROLES: Orders & Shipping */}
+          {['SuperAdmin', 'InventoryManager', 'Staff'].includes(user.role) && (
+            <button className={`nav-link text-start fw-bold ${activeTab === 'orders' ? 'active bg-warning text-dark' : 'text-white'}`} onClick={() => setActiveTab('orders')}>
+              <i className="bi bi-receipt me-2"></i>Orders & Shipping
+            </button>
+          )}
+
+          {/* SUPERADMIN & STAFF: Return Requests */}
+          {['SuperAdmin', 'Staff'].includes(user.role) && (
+            <button className={`nav-link text-start fw-bold ${activeTab === 'returns' ? 'active bg-warning text-dark' : 'text-white'}`} onClick={() => setActiveTab('returns')}>
+              <i className="bi bi-arrow-counterclockwise me-2"></i>🔄 Return Requests ({returnRequestsCount})
+            </button>
+          )}
+
+          {/* SUPERADMIN ONLY: Customer Reviews */}
+          {user.role === 'SuperAdmin' && (
+            <button className={`nav-link text-start fw-bold ${activeTab === 'reviews' ? 'active bg-warning text-dark' : 'text-white'}`} onClick={() => setActiveTab('reviews')}>
+              <i className="bi bi-star-fill me-2"></i>⭐ Customer Reviews ({reviews.length})
+            </button>
+          )}
+
+          {/* SUPERADMIN ONLY: Marketing & Coupons */}
+          {user.role === 'SuperAdmin' && (
             <button className={`nav-link text-start fw-bold ${activeTab === 'coupons' ? 'active bg-warning text-dark' : 'text-white'}`} onClick={() => setActiveTab('coupons')}>
               <i className="bi bi-ticket-perforated me-2"></i>Marketing & Coupons ({coupons.length})
             </button>
           )}
+
         </div>
 
         <div className="mt-auto pt-3 border-top border-secondary">
@@ -547,7 +584,8 @@ function App() {
 
       <div className="flex-grow-1 p-4 overflow-auto" style={{ maxHeight: '100vh' }}>
         
-        {activeTab === 'dashboard' && (
+        {/* DASHBOARD TAB (SuperAdmin Only) */}
+        {activeTab === 'dashboard' && user.role === 'SuperAdmin' && (
           <div>
             <h3 className="fw-bold mb-4">Enterprise Analytics Overview</h3>
             <div className="row g-3 mb-4">
@@ -614,7 +652,8 @@ function App() {
           </div>
         )}
 
-        {activeTab === 'banners' && (
+        {/* BANNERS TAB (SuperAdmin Only) */}
+        {activeTab === 'banners' && user.role === 'SuperAdmin' && (
           <div>
             <h3 className="fw-bold mb-4">Customer Website Hero Banner Manager</h3>
             <div className="row g-4">
@@ -685,31 +724,30 @@ function App() {
           </div>
         )}
 
-        {activeTab === 'products' && (
+        {/* PRODUCTS TAB (SuperAdmin & InventoryManager) */}
+        {activeTab === 'products' && ['SuperAdmin', 'InventoryManager'].includes(user.role) && (
           <div>
             <h3 className="fw-bold mb-4">Product Information & Inventory (PIM)</h3>
 
-            {['SuperAdmin', 'InventoryManager', 'admin', 'manager'].includes(user.role) && (
-              <div className="card border-0 shadow-sm p-4 bg-white mb-4">
-                <h5 className="fw-bold mb-3 text-success">
-                  <i className="bi bi-file-earmark-spreadsheet me-2"></i>Bulk Product Upload (CSV)
-                </h5>
-                <form onSubmit={handleCsvUpload} className="d-flex gap-3 align-items-center">
-                  <input 
-                    type="file" 
-                    className="form-control" 
-                    accept=".csv" 
-                    onChange={(e) => setCsvFile(e.target.files[0])} 
-                  />
-                  <button type="submit" className="btn btn-success fw-bold text-nowrap">
-                    <i className="bi bi-upload me-1"></i> Upload CSV
-                  </button>
-                </form>
-                <small className="text-muted mt-2 d-block">
-                  CSV Headers Required: <code>name, price, category, description, image, stock</code>
-                </small>
-              </div>
-            )}
+            <div className="card border-0 shadow-sm p-4 bg-white mb-4">
+              <h5 className="fw-bold mb-3 text-success">
+                <i className="bi bi-file-earmark-spreadsheet me-2"></i>Bulk Product Upload (CSV)
+              </h5>
+              <form onSubmit={handleCsvUpload} className="d-flex gap-3 align-items-center">
+                <input 
+                  type="file" 
+                  className="form-control" 
+                  accept=".csv" 
+                  onChange={(e) => setCsvFile(e.target.files[0])} 
+                />
+                <button type="submit" className="btn btn-success fw-bold text-nowrap">
+                  <i className="bi bi-upload me-1"></i> Upload CSV
+                </button>
+              </form>
+              <small className="text-muted mt-2 d-block">
+                CSV Headers Required: <code>name, price, category, description, image, stock</code>
+              </small>
+            </div>
 
             <div className="row g-4">
               <div className="col-lg-5">
@@ -820,7 +858,7 @@ function App() {
                           <td>
                             <div className="btn-group btn-group-sm">
                               <button className="btn btn-outline-primary" onClick={() => handleEditProduct(p)}>Edit</button>
-                              {['SuperAdmin', 'admin'].includes(user.role) && (
+                              {user.role === 'SuperAdmin' && (
                                 <button className="btn btn-outline-danger" onClick={() => handleDeleteProduct(targetId)}>Delete</button>
                               )}
                             </div>
@@ -835,8 +873,8 @@ function App() {
           </div>
         )}
 
-        {/* TAB 4: ORDERS WITH MULTI-FILTER */}
-        {activeTab === 'orders' && (
+        {/* ORDERS TAB (All Roles) */}
+        {activeTab === 'orders' && ['SuperAdmin', 'InventoryManager', 'Staff'].includes(user.role) && (
           <div>
             <div className="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
               <h3 className="fw-bold m-0">Live Customer Orders & Logistics</h3>
@@ -963,8 +1001,8 @@ function App() {
           </div>
         )}
 
-        {/* TAB 5: RETURNS MANAGEMENT */}
-        {activeTab === 'returns' && (
+        {/* RETURNS TAB (SuperAdmin & Staff) */}
+        {activeTab === 'returns' && ['SuperAdmin', 'Staff'].includes(user.role) && (
           <div>
             <div className="d-flex justify-content-between align-items-center mb-4">
               <h3 className="fw-bold m-0">🔄 Customer Return & Refund Requests</h3>
@@ -1045,8 +1083,8 @@ function App() {
           </div>
         )}
 
-        {/* TAB 6: REVIEWS */}
-        {activeTab === 'reviews' && (
+        {/* REVIEWS TAB (SuperAdmin Only) */}
+        {activeTab === 'reviews' && user.role === 'SuperAdmin' && (
           <div>
             <div className="d-flex justify-content-between align-items-center mb-4">
               <h3 className="fw-bold m-0">⭐ Customer Ratings & Feedback Reviews</h3>
@@ -1097,8 +1135,8 @@ function App() {
           </div>
         )}
 
-        {/* TAB 7: COUPONS */}
-        {activeTab === 'coupons' && ['SuperAdmin', 'admin'].includes(user.role) && (
+        {/* COUPONS TAB (SuperAdmin Only) */}
+        {activeTab === 'coupons' && user.role === 'SuperAdmin' && (
           <div>
             <h3 className="fw-bold mb-4">Marketing & Discount Coupon Engine</h3>
             <div className="row g-4">
