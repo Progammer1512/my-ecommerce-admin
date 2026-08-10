@@ -27,7 +27,7 @@ function App() {
   const [signupEmail, setSignupEmail] = useState('');
   const [signupPassword, setSignupPassword] = useState('');
   const [signupRole, setSignupRole] = useState('InventoryManager');
-  const [signupSecretCode, setSignupSecretCode] = useState(''); // 🔒 Secret code state
+  const [signupSecretCode, setSignupSecretCode] = useState('');
 
   // SIDEBAR TOGGLE STATE (DEFAULT FALSE)
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -150,12 +150,10 @@ function App() {
     }
   };
 
-  // 🔒 SECURE SIGNUP TRIGGER WITH PROMPT
   const handleOpenSignup = () => {
     const enteredCode = prompt("🔒 Enter Admin Security Secret Code to Access Signup:");
-    if (enteredCode === null) return; // Cancelled
+    if (enteredCode === null) return;
 
-    // Yahan hum default code 'iamthebest~$@%^&15121' check kar rahe hain (jo backend me bhi set hai)
     if (enteredCode.trim() === 'iamthebest~$@%^&15121') {
       setIsSignup(true);
       setSignupSecretCode(enteredCode.trim());
@@ -164,7 +162,6 @@ function App() {
     }
   };
 
-  // MONGODB CONNECTED SIGNUP HANDLER WITH SECRET CODE
   const handleSignup = async (e) => {
     e.preventDefault();
     try {
@@ -173,7 +170,7 @@ function App() {
         email: signupEmail,
         password: signupPassword,
         role: signupRole,
-        secretCode: signupSecretCode // Sending secret code to backend
+        secretCode: signupSecretCode
       });
 
       alert(response.data.message || 'Signup successful! Please login now.');
@@ -421,7 +418,7 @@ function App() {
     setCategory(p.category);
     setDescription(p.description);
     setImage(getCleanImageUrl(p.image));
-    setStock(p.stock || 10);
+    setStock(p.stock !== undefined ? p.stock : 10);
   };
 
   const handleDeleteProduct = async (id) => {
@@ -906,16 +903,17 @@ function App() {
                     <tbody>
                       {products.map((p) => {
                         const targetId = p._id || p.id;
+                        const currentStock = p.stock !== undefined ? Number(p.stock) : 10;
                         return (
                         <tr key={targetId}>
                           <td className="fw-bold small">{p.name}</td>
                           <td><span className="badge bg-secondary">{p.category}</span></td>
                           <td className="text-success fw-bold">₹{p.price}</td>
                           <td>
-                            {(p.stock || 10) < 5 ? (
-                              <span className="badge bg-danger">Low Stock ({p.stock || 2})</span>
+                            {currentStock < 5 ? (
+                              <span className="badge bg-danger">Low Stock ({currentStock})</span>
                             ) : (
-                              <span className="badge bg-success">In Stock ({p.stock || 15})</span>
+                              <span className="badge bg-success">In Stock ({currentStock})</span>
                             )}
                           </td>
                           <td>
