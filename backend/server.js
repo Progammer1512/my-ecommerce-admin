@@ -17,28 +17,21 @@ const app = express();
 // Connect Database
 connectDB();
 
-// 1. CORS CONFIGURATION (Explicit Cross-Origin Allowed)
-app.use(cors({
-  origin: '*',
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
-}));
+// 1. TOP PRIORITY: CORS CONFIGURATION (Prevents Network & Origin Block Errors)
+app.use(cors());
 
-// Pre-Flight Options Route
-app.options('*', cors());
-
-// Security Headers
-app.use(helmet({ crossOriginResourcePolicy: false }));
-
-// 2. HIGHER PAYLOAD LIMIT FOR BASE64 IMAGES
+// 2. EXPRESS BODY PARSERS (High Payload Limit for Compressed Base64 Data)
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
-// Multer Memory Storage Setup (Cloud Native Base64 Conversion)
+// 3. SECURITY HEADERS
+app.use(helmet({ crossOriginResourcePolicy: false }));
+
+// Multer Memory Storage Setup
 const storage = multer.memoryStorage();
 const upload = multer({ 
   storage,
-  limits: { fileSize: 15 * 1024 * 1024 } // 15MB file limit
+  limits: { fileSize: 10 * 1024 * 1024 }
 });
 
 // DIRECT IMAGE UPLOAD ROUTES
