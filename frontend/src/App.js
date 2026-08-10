@@ -3,7 +3,7 @@ import axios from 'axios';
 import 'bootstrap/dist/css/bootstrap.min.css';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
 
-// LIVE BACKEND BASE URL
+// LIVE BACKEND BASE URL (NO TRAILING SLASH TO PREVENT DOUBLE SLASH 404)
 const BASE_URL = 'https://my-ecommerce-project-nmfj.onrender.com';
 
 function App() {
@@ -96,7 +96,7 @@ function App() {
     setUser(null);
   };
 
-  // FETCH DATA WITH AUTH BEARER HEADER
+  // FETCH DATA WITH AUTH BEARER HEADER & STRICT URL PARSING
   const fetchData = async () => {
     try {
       const authConfig = getAuthHeader();
@@ -186,7 +186,7 @@ function App() {
     { name: 'Sun', Revenue: 3490, Orders: 4 },
   ];
 
-  // AUTOMATIC CLIENT-SIDE IMAGE COMPRESSOR (PREVENTS NETWORK & PAYLOAD ERRORS)
+  // AUTOMATIC CLIENT-SIDE IMAGE COMPRESSOR
   const handleImageFileUpload = (e, targetSetter) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -198,7 +198,7 @@ function App() {
       img.src = event.target.result;
       img.onload = () => {
         const canvas = document.createElement('canvas');
-        const MAX_WIDTH = 1000; // Resizes heavy images to max 1000px width
+        const MAX_WIDTH = 1000;
         const scale = MAX_WIDTH / img.width;
         
         canvas.width = scale < 1 ? MAX_WIDTH : img.width;
@@ -207,7 +207,6 @@ function App() {
         const ctx = canvas.getContext('2d');
         ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
         
-        // Compress image quality to lightweight 70% JPEG
         const compressedBase64 = canvas.toDataURL('image/jpeg', 0.7);
         targetSetter(compressedBase64);
         alert('📸 Image compressed and attached successfully!');
