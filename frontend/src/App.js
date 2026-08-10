@@ -3,10 +3,10 @@ import axios from 'axios';
 import 'bootstrap/dist/css/bootstrap.min.css';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
 
-// LIVE BACKEND BASE URL (NO TRAILING SLASH TO PREVENT DOUBLE SLASH 404)
+// LIVE BACKEND BASE URL (NO TRAILING SLASH)
 const BASE_URL = 'https://my-ecommerce-project-nmfj.onrender.com';
 
-// HELPER: SANITIZE OLD LOCALHOST IMAGE URLS TO LIVE RENDER URLS
+// HELPER: SANITIZE OLD LOCALHOST IMAGE URLS
 const getCleanImageUrl = (url) => {
   if (!url) return '';
   if (typeof url === 'string' && url.includes('localhost:5000')) {
@@ -16,7 +16,6 @@ const getCleanImageUrl = (url) => {
 };
 
 function App() {
-  // Authentication State
   const [user, setUser] = useState(null);
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
@@ -28,19 +27,15 @@ function App() {
   const [reviews, setReviews] = useState([]);
   const [csvFile, setCsvFile] = useState(null);
 
-  // SEARCH & STATUS FILTER ORDERS STATE
   const [orderSearchTerm, setOrderSearchTerm] = useState('');
   const [orderStatusFilter, setOrderStatusFilter] = useState('ALL');
 
-  // Dynamic Categories State
   const [categories, setCategories] = useState(['Electronics', 'Footwear', 'Accessories', 'Fashion']);
   const [showCustomCategory, setShowCustomCategory] = useState(false);
   const [newCategoryInput, setNewCategoryInput] = useState('');
 
-  // Dynamic Category & Usage Limit Coupons State
   const [coupons, setCoupons] = useState([]);
 
-  // Product Form States
   const [editingId, setEditingId] = useState(null);
   const [name, setName] = useState('');
   const [price, setPrice] = useState('');
@@ -49,26 +44,22 @@ function App() {
   const [image, setImage] = useState('');
   const [stock, setStock] = useState(10);
 
-  // Banner Form States
   const [bannerTitle, setBannerTitle] = useState('');
   const [bannerSubtitle, setBannerSubtitle] = useState('');
   const [bannerBadge, setBannerBadge] = useState('');
   const [bannerImage, setBannerImage] = useState('');
   const [bannerBg, setBannerBg] = useState('linear-gradient(135deg, #0d6efd 0%, #0a58ca 100%)');
 
-  // New Coupon Form States
   const [newCouponCode, setNewCouponCode] = useState('');
   const [newCouponDiscount, setNewCouponDiscount] = useState('');
   const [newCouponCategory, setNewCouponCategory] = useState('All');
   const [newCouponMaxUsage, setNewCouponMaxUsage] = useState(50);
 
-  // Helper function to get Auth Headers
   const getAuthHeader = () => {
     const token = localStorage.getItem('adminToken');
     return token ? { headers: { Authorization: `Bearer ${token}` } } : {};
   };
 
-  // Check saved login session on load
   useEffect(() => {
     const savedUser = localStorage.getItem('adminUser');
     if (savedUser) {
@@ -76,7 +67,6 @@ function App() {
     }
   }, []);
 
-  // REAL BACKEND API LOGIN HANDLER
   const handleLogin = async (e) => {
     e.preventDefault();
     try {
@@ -105,12 +95,10 @@ function App() {
     setUser(null);
   };
 
-  // FETCH DATA WITH AUTH BEARER HEADER & STRICT URL PARSING
   const fetchData = async () => {
     try {
       const authConfig = getAuthHeader();
 
-      // 1. Fetch Products
       const prodRes = await axios.get(`${BASE_URL}/api/products`, authConfig);
       const fetchedProducts = prodRes.data.products || prodRes.data;
       setProducts(Array.isArray(fetchedProducts) ? fetchedProducts : []);
@@ -118,20 +106,16 @@ function App() {
       const existingCategories = Array.isArray(fetchedProducts) ? fetchedProducts.map(p => p.category).filter(Boolean) : [];
       setCategories(prev => Array.from(new Set([...prev, ...existingCategories])));
 
-      // 2. Fetch Orders
       const orderRes = await axios.get(`${BASE_URL}/api/orders`, authConfig);
       const fetchedOrders = Array.isArray(orderRes.data) ? orderRes.data : (orderRes.data.orders || []);
       setOrders(fetchedOrders);
 
-      // 3. Fetch Banners
       const bannerRes = await axios.get(`${BASE_URL}/api/banners`, authConfig);
       setBanners(Array.isArray(bannerRes.data) ? bannerRes.data : []);
 
-      // 4. Fetch Reviews
       const revRes = await axios.get(`${BASE_URL}/api/reviews`, authConfig);
       setReviews(Array.isArray(revRes.data) ? revRes.data : []);
 
-      // 5. Fetch Coupons
       const couponRes = await axios.get(`${BASE_URL}/api/coupons`, authConfig);
       if (Array.isArray(couponRes.data)) {
         setCoupons(couponRes.data);
@@ -149,12 +133,10 @@ function App() {
     }
   }, [user]);
 
-  // Analytics Calculations
   const totalRevenue = orders.reduce((acc, curr) => acc + (curr.totalPrice || 0), 0);
   const totalOrdersCount = orders.length;
   const returnRequestsCount = orders.filter(o => o.status && o.status.includes('Return')).length;
 
-  // Filter Orders
   const filteredOrders = orders.filter(o => {
     const currentStatus = o.status || 'Processing';
     let statusMatch = true;
@@ -176,7 +158,8 @@ function App() {
     let searchMatch = true;
     if (orderSearchTerm.trim()) {
       const cleanTerm = orderSearchTerm.trim().toLowerCase();
-      const orderIdMatch = (o._id || '').toLowerCase().includes(cleanTerm);
+      // SAFE ID MATCHING
+      const orderIdMatch = (o._id || o.id || '').toLowerCase().includes(cleanTerm);
       const nameMatch = (o.shippingAddress?.name || '').toLowerCase().includes(cleanTerm);
       const emailMatch = (o.userEmail || '').toLowerCase().includes(cleanTerm);
       searchMatch = orderIdMatch || nameMatch || emailMatch;
@@ -195,10 +178,14 @@ function App() {
     { name: 'Sun', Revenue: 3490, Orders: 4 },
   ];
 
-  // AUTOMATIC CLIENT-SIDE IMAGE COMPRESSOR
   const handleImageFileUpload = (e, targetSetter) => {
     const file = e.target.files[0];
     if (!file) return;
+
+    if (file.size > 5 * 1024 * 1024) {
+      alert('File is too large! Please upload an image under 5MB.');
+      return;
+    }
 
     const reader = new FileReader();
     reader.readAsDataURL(file);
@@ -218,12 +205,11 @@ function App() {
         
         const compressedBase64 = canvas.toDataURL('image/jpeg', 0.7);
         targetSetter(compressedBase64);
-        alert('📸 Image compressed and attached successfully!');
+        alert('📸 Image processed and ready!');
       };
     };
   };
 
-  // Add Banner Handler
   const handleAddBanner = async (e) => {
     e.preventDefault();
     if (!bannerTitle || !bannerImage) return alert('Title and Image are required!');
@@ -244,7 +230,6 @@ function App() {
       setBannerBadge('');
       setBannerImage('');
     } catch (err) {
-      console.error('Add Banner Error:', err);
       alert('Failed to publish banner: ' + (err.response?.data?.message || err.message));
     }
   };
@@ -260,7 +245,6 @@ function App() {
     }
   };
 
-  // Category Handlers
   const handleCategoryChange = (e) => {
     const value = e.target.value;
     if (value === 'ADD_NEW') {
@@ -282,7 +266,6 @@ function App() {
     setShowCustomCategory(false);
   };
 
-  // Bulk CSV Upload Handler
   const handleCsvUpload = async (e) => {
     e.preventDefault();
     if (!csvFile) return alert('Please select a CSV file first!');
@@ -306,7 +289,6 @@ function App() {
     }
   };
 
-  // Product Submit
   const handleProductSubmit = async (e) => {
     e.preventDefault();
     const productData = { name, price: Number(price), category, description, image, stock: Number(stock) };
@@ -327,7 +309,8 @@ function App() {
   };
 
   const handleEditProduct = (p) => {
-    setEditingId(p._id);
+    const targetId = p._id || p.id;
+    setEditingId(targetId);
     setName(p.name);
     setPrice(p.price);
     setCategory(p.category);
@@ -358,8 +341,13 @@ function App() {
     setShowCustomCategory(false);
   };
 
-  // Order Status Update Handler
+  // 🚀 FIXED: SAFE ORDER ID EXTRACTION FOR STATUS UPDATES
   const handleOrderStatusChange = async (orderId, newStatus) => {
+    if (!orderId || orderId === 'undefined') {
+      alert('Error: Missing Order ID! Update cannot be processed for invalid orders.');
+      return;
+    }
+    
     try {
       await axios.put(`${BASE_URL}/api/orders/${orderId}`, { status: newStatus }, getAuthHeader());
       alert(`Order #${orderId} status updated to ${newStatus}`);
@@ -369,7 +357,6 @@ function App() {
     }
   };
 
-  // Coupon Handler
   const handleAddCoupon = async (e) => {
     e.preventDefault();
     if (!newCouponCode || !newCouponDiscount) return alert('Code and Discount are required!');
@@ -442,7 +429,6 @@ function App() {
 
   return (
     <div className="d-flex bg-light min-vh-100">
-      {/* Sidebar Navigation */}
       <div className="bg-dark text-white p-3 d-flex flex-column" style={{ width: '260px', minHeight: '100vh' }}>
         <h4 className="text-warning fw-bold mb-1 px-2">
           <i className="bi bi-speedometer2 me-2"></i>TechStore Admin
@@ -486,10 +472,8 @@ function App() {
         </div>
       </div>
 
-      {/* Main Content Area */}
       <div className="flex-grow-1 p-4 overflow-auto" style={{ maxHeight: '100vh' }}>
         
-        {/* TAB 1: ANALYTICS DASHBOARD */}
         {activeTab === 'dashboard' && (
           <div>
             <h3 className="fw-bold mb-4">Enterprise Analytics Overview</h3>
@@ -557,7 +541,6 @@ function App() {
           </div>
         )}
 
-        {/* TAB 2: SLIDING BANNER MANAGEMENT */}
         {activeTab === 'banners' && (
           <div>
             <h3 className="fw-bold mb-4">Customer Website Hero Banner Manager</h3>
@@ -606,8 +589,10 @@ function App() {
                     {banners.length === 0 ? (
                       <p className="text-muted">No active banners. Add one using the form.</p>
                     ) : (
-                      banners.map((b) => (
-                        <div key={b._id || b.id} className="p-3 rounded-3 text-white d-flex align-items-center justify-content-between shadow-sm" style={{ background: b.bg || 'linear-gradient(135deg, #0d6efd 0%, #0a58ca 100%)' }}>
+                      banners.map((b) => {
+                        const bannerId = b._id || b.id;
+                        return (
+                        <div key={bannerId} className="p-3 rounded-3 text-white d-flex align-items-center justify-content-between shadow-sm" style={{ background: b.bg || 'linear-gradient(135deg, #0d6efd 0%, #0a58ca 100%)' }}>
                           <div>
                             <span className="badge bg-warning text-dark fw-bold mb-1">{b.badge || 'PROMO'}</span>
                             <h5 className="fw-bold m-0">{b.title}</h5>
@@ -615,10 +600,10 @@ function App() {
                           </div>
                           <div className="d-flex align-items-center gap-3">
                             <img src={getCleanImageUrl(b.img)} alt="Preview" className="rounded border bg-white" width="60" height="60" style={{ objectFit: 'cover' }} />
-                            <button className="btn btn-danger btn-sm fw-bold" onClick={() => handleDeleteBanner(b._id || b.id)}>Delete</button>
+                            <button className="btn btn-danger btn-sm fw-bold" onClick={() => handleDeleteBanner(bannerId)}>Delete</button>
                           </div>
                         </div>
-                      ))
+                      )})
                     )}
                   </div>
                 </div>
@@ -627,7 +612,6 @@ function App() {
           </div>
         )}
 
-        {/* TAB 3: PRODUCT & STOCK MANAGEMENT */}
         {activeTab === 'products' && (
           <div>
             <h3 className="fw-bold mb-4">Product Information & Inventory (PIM)</h3>
@@ -746,8 +730,10 @@ function App() {
                       </tr>
                     </thead>
                     <tbody>
-                      {products.map((p) => (
-                        <tr key={p._id}>
+                      {products.map((p) => {
+                        const targetId = p._id || p.id;
+                        return (
+                        <tr key={targetId}>
                           <td className="fw-bold small">{p.name}</td>
                           <td><span className="badge bg-secondary">{p.category}</span></td>
                           <td className="text-success fw-bold">₹{p.price}</td>
@@ -762,12 +748,12 @@ function App() {
                             <div className="btn-group btn-group-sm">
                               <button className="btn btn-outline-primary" onClick={() => handleEditProduct(p)}>Edit</button>
                               {['SuperAdmin', 'admin'].includes(user.role) && (
-                                <button className="btn btn-outline-danger" onClick={() => handleDeleteProduct(p._id)}>Delete</button>
+                                <button className="btn btn-outline-danger" onClick={() => handleDeleteProduct(targetId)}>Delete</button>
                               )}
                             </div>
                           </td>
                         </tr>
-                      ))}
+                      )})}
                     </tbody>
                   </table>
                 </div>
@@ -846,9 +832,11 @@ function App() {
                       </td>
                     </tr>
                   ) : (
-                    filteredOrders.map((o) => (
-                      <tr key={o._id}>
-                        <td className="fw-bold text-primary">#{o._id}</td>
+                    filteredOrders.map((o) => {
+                      const orderId = o._id || o.id;
+                      return (
+                      <tr key={orderId}>
+                        <td className="fw-bold text-primary">#{orderId}</td>
                         <td className="fw-bold">
                           {o.shippingAddress?.name || 'Customer'}
                           {o.userEmail && <small className="text-muted d-block">{o.userEmail}</small>}
@@ -872,7 +860,7 @@ function App() {
                           <select 
                             className="form-select form-select-sm fw-bold" 
                             value={o.status || 'Processing'}
-                            onChange={(e) => handleOrderStatusChange(o._id, e.target.value)}
+                            onChange={(e) => handleOrderStatusChange(orderId, e.target.value)}
                           >
                             <option value="Pending">Pending</option>
                             <option value="Processing">Processing</option>
@@ -887,7 +875,7 @@ function App() {
                           </select>
                         </td>
                       </tr>
-                    ))
+                    )})
                   )}
                 </tbody>
               </table>
@@ -926,9 +914,11 @@ function App() {
                       </td>
                     </tr>
                   ) : (
-                    orders.filter(o => o.status && o.status.includes('Return')).map((o) => (
-                      <tr key={o._id}>
-                        <td className="fw-bold text-primary">#{o._id}</td>
+                    orders.filter(o => o.status && o.status.includes('Return')).map((o) => {
+                      const orderId = o._id || o.id;
+                      return (
+                      <tr key={orderId}>
+                        <td className="fw-bold text-primary">#{orderId}</td>
                         <td className="fw-bold">
                           {o.shippingAddress?.name || 'Customer'}
                           <small className="text-muted d-block">{o.userEmail}</small>
@@ -951,7 +941,7 @@ function App() {
                           <select 
                             className="form-select form-select-sm fw-bold border-danger" 
                             value={o.status}
-                            onChange={(e) => handleOrderStatusChange(o._id, e.target.value)}
+                            onChange={(e) => handleOrderStatusChange(orderId, e.target.value)}
                           >
                             <option value={o.status}>-- Action --</option>
                             <option value="Return Approved">✅ Approve Return Request</option>
@@ -961,7 +951,7 @@ function App() {
                           </select>
                         </td>
                       </tr>
-                    ))
+                    )})
                   )}
                 </tbody>
               </table>
@@ -999,9 +989,11 @@ function App() {
                       </td>
                     </tr>
                   ) : (
-                    reviews.map((rev, idx) => (
+                    reviews.map((rev, idx) => {
+                      const reviewId = rev.orderId || rev.id || rev._id || `REV_${idx}`;
+                      return (
                       <tr key={idx}>
-                        <td className="fw-bold text-primary">#{rev.orderId}</td>
+                        <td className="fw-bold text-primary">#{reviewId}</td>
                         <td className="fw-bold">{rev.customerName} <small className="text-muted d-block">{rev.customerEmail}</small></td>
                         <td>
                           <span className="badge bg-warning text-dark fw-bold fs-6">
@@ -1011,7 +1003,7 @@ function App() {
                         <td className="fw-semibold text-dark">{rev.comment || 'No comment provided'}</td>
                         <td className="small text-muted">{rev.date || 'Recent'}</td>
                       </tr>
-                    ))
+                    )})
                   )}
                 </tbody>
               </table>
@@ -1084,8 +1076,10 @@ function App() {
                       </tr>
                     </thead>
                     <tbody>
-                      {coupons.map((c, idx) => (
-                        <tr key={c._id || c.id || idx}>
+                      {coupons.map((c, idx) => {
+                        const couponId = c._id || c.id || c.code;
+                        return (
+                        <tr key={couponId}>
                           <td className="fw-bold text-primary">{c.code}</td>
                           <td>
                             <span className={`badge ${c.category === 'All' ? 'bg-primary' : 'bg-info text-dark'} fw-bold`}>
@@ -1106,12 +1100,12 @@ function App() {
                             )}
                           </td>
                           <td>
-                            <button className="btn btn-sm btn-outline-danger fw-bold" onClick={() => handleDeleteCoupon(c._id || c.id || c.code)}>
+                            <button className="btn btn-sm btn-outline-danger fw-bold" onClick={() => handleDeleteCoupon(couponId)}>
                               Delete
                             </button>
                           </td>
                         </tr>
-                      ))}
+                      )})}
                     </tbody>
                   </table>
                 </div>
