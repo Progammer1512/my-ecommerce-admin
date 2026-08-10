@@ -30,8 +30,12 @@ app.use(helmet({ crossOriginResourcePolicy: false }));
 app.use(cors({ origin: '*' }));
 app.use(express.json());
 
-// Make uploads folder publicly accessible
-app.use('/uploads', express.static(uploadsDir));
+// Make uploads folder publicly accessible with CORS headers
+app.use('/uploads', express.static(uploadsDir, {
+  setHeaders: (res) => {
+    res.set('Access-Control-Allow-Origin', '*');
+  }
+}));
 
 // Multer Disk Storage Setup
 const storage = multer.diskStorage({
@@ -45,20 +49,28 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage });
 
-// DIRECT FILE UPLOAD ROUTE (Bypassing Rate Limiter)
-app.post('/api/upload', protect, authorizeRoles('SuperAdmin', 'Manager'), upload.single('image'), (req, res) => {
+// DYNAMIC FILE UPLOAD HANDLER FUNCTION
+const handleFileUpload = (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ message: 'No file selected' });
     }
-    const imageUrl = `http://localhost:5000/uploads/${req.file.filename}`;
+    // DYNAMIC DOMAIN RESOLUTION (Renders relative live host automatically)
+    const host = req.get('host');
+    const protocol = req.protocol;
+    const imageUrl = `${protocol}://${host}/uploads/${req.file.filename}`;
+    
     console.log('📸 File Uploaded Successfully:', imageUrl);
     return res.status(200).json({ imageUrl });
   } catch (error) {
     console.error('Upload Error:', error);
     return res.status(500).json({ message: 'Server upload error' });
   }
-});
+};
+
+// DIRECT FILE UPLOAD ROUTES
+app.post('/api/upload', protect, authorizeRoles('SuperAdmin', 'Manager'), upload.single('image'), handleFileUpload);
+app.post('/api/products/upload', protect, authorizeRoles('SuperAdmin', 'Manager'), upload.single('image'), handleFileUpload);
 
 // BULK PRODUCTS UPLOAD ROUTE (ONLY SUPERADMIN & MANAGER)
 app.post('/api/products/bulk-upload', protect, authorizeRoles('SuperAdmin', 'Manager'), upload.any(), async (req, res) => {
