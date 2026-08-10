@@ -28,8 +28,8 @@ function App() {
   const [signupPassword, setSignupPassword] = useState('');
   const [signupRole, setSignupRole] = useState('InventoryManager');
 
-  // SIDEBAR TOGGLE STATE (3-LINE MENU)
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  // SIDEBAR TOGGLE STATE (DEFAULT FALSE RAKHA HAI TAAKI PEHLE BAND AAYE)
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const [activeTab, setActiveTab] = useState('dashboard');
   const [products, setProducts] = useState([]);
