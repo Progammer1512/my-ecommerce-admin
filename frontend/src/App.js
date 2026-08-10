@@ -394,18 +394,22 @@ function App() {
   const handleProductSubmit = async (e) => {
     e.preventDefault();
     const productData = { name, price: Number(price), category, description, image, stock: Number(stock) };
+    console.log("📤 SUBMITTING PRODUCT DATA:", productData);
 
     try {
       if (editingId) {
-        await axios.put(`${BASE_URL}/api/products/${editingId}`, productData, getAuthHeader());
+        const res = await axios.put(`${BASE_URL}/api/products/${editingId}`, productData, getAuthHeader());
+        console.log("✅ UPDATE RESPONSE:", res.data);
         alert('✅ Product Updated in Database!');
       } else {
-        await axios.post(`${BASE_URL}/api/products`, productData, getAuthHeader());
+        const res = await axios.post(`${BASE_URL}/api/products`, productData, getAuthHeader());
+        console.log("🎉 CREATE RESPONSE:", res.data);
         alert('🎉 New Product Created in Database!');
       }
       resetProductForm();
       fetchData();
     } catch (error) {
+      console.error('❌ SUBMIT ERROR:', error.response || error);
       alert('Failed: ' + (error.response?.data?.message || error.message));
     }
   };
@@ -418,7 +422,7 @@ function App() {
     setCategory(p.category);
     setDescription(p.description);
     setImage(getCleanImageUrl(p.image));
-    setStock(p.stock !== undefined ? p.stock : 10); // 🔧 FIXED: Now correctly binds exact stock value to form
+    setStock(p.stock !== undefined ? p.stock : 10);
   };
 
   const handleDeleteProduct = async (id) => {
@@ -853,7 +857,13 @@ function App() {
 
                     <div className="mb-2">
                       <label className="form-label fw-semibold">Stock Quantity</label>
-                      <input type="number" className="form-control" required value={stock} onChange={(e) => setStock(e.target.value)} />
+                      <input 
+                        type="number" 
+                        className="form-control" 
+                        required 
+                        value={stock} 
+                        onChange={(e) => setStock(e.target.value)} 
+                      />
                     </div>
 
                     <div className="mb-2">
