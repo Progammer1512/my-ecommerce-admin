@@ -3,6 +3,9 @@ import axios from 'axios';
 import 'bootstrap/dist/css/bootstrap.min.css';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
 
+// LIVE BACKEND BASE URL
+const BASE_URL = 'https://my-ecommerce-project-nmfj.onrender.com';
+
 function App() {
   // Authentication State
   const [user, setUser] = useState(null);
@@ -68,7 +71,7 @@ function App() {
   const handleLogin = async (e) => {
     e.preventDefault();
     try {
-      const response = await axios.post('http://localhost:5000/api/auth/login', {
+      const response = await axios.post(`${BASE_URL}/api/auth/login`, {
         email: loginEmail,
         password: loginPassword
       });
@@ -99,7 +102,7 @@ function App() {
       const authConfig = getAuthHeader();
 
       // 1. Fetch Products
-      const prodRes = await axios.get('http://localhost:5000/api/products', authConfig);
+      const prodRes = await axios.get(`${BASE_URL}/api/products`, authConfig);
       const fetchedProducts = prodRes.data.products || prodRes.data;
       setProducts(Array.isArray(fetchedProducts) ? fetchedProducts : []);
 
@@ -107,20 +110,20 @@ function App() {
       setCategories(prev => Array.from(new Set([...prev, ...existingCategories])));
 
       // 2. Fetch Orders
-      const orderRes = await axios.get('http://localhost:5000/api/orders', authConfig);
+      const orderRes = await axios.get(`${BASE_URL}/api/orders`, authConfig);
       const fetchedOrders = Array.isArray(orderRes.data) ? orderRes.data : (orderRes.data.orders || []);
       setOrders(fetchedOrders);
 
       // 3. Fetch Banners
-      const bannerRes = await axios.get('http://localhost:5000/api/banners', authConfig);
+      const bannerRes = await axios.get(`${BASE_URL}/api/banners`, authConfig);
       setBanners(Array.isArray(bannerRes.data) ? bannerRes.data : []);
 
       // 4. Fetch Reviews
-      const revRes = await axios.get('http://localhost:5000/api/reviews', authConfig);
+      const revRes = await axios.get(`${BASE_URL}/api/reviews`, authConfig);
       setReviews(Array.isArray(revRes.data) ? revRes.data : []);
 
       // 5. Fetch Coupons
-      const couponRes = await axios.get('http://localhost:5000/api/coupons', authConfig);
+      const couponRes = await axios.get(`${BASE_URL}/api/coupons`, authConfig);
       if (Array.isArray(couponRes.data)) {
         setCoupons(couponRes.data);
       }
@@ -193,7 +196,7 @@ function App() {
 
     try {
       const token = localStorage.getItem('adminToken');
-      const res = await axios.post('http://localhost:5000/api/upload', formData, {
+      const res = await axios.post(`${BASE_URL}/api/upload`, formData, {
         headers: { 
           'Content-Type': 'multipart/form-data',
           Authorization: `Bearer ${token}`
@@ -214,7 +217,7 @@ function App() {
     if (!bannerTitle || !bannerImage) return alert('Title and Image are required!');
 
     try {
-      const res = await axios.post('http://localhost:5000/api/banners', {
+      const res = await axios.post(`${BASE_URL}/api/banners`, {
         title: bannerTitle,
         subtitle: bannerSubtitle,
         badge: bannerBadge,
@@ -235,7 +238,7 @@ function App() {
   const handleDeleteBanner = async (id) => {
     if (window.confirm('Delete this banner slide?')) {
       try {
-        const res = await axios.delete(`http://localhost:5000/api/banners/${id}`, getAuthHeader());
+        const res = await axios.delete(`${BASE_URL}/api/banners/${id}`, getAuthHeader());
         setBanners(res.data.banners || []);
       } catch (err) {
         alert('Delete failed: ' + (err.response?.data?.message || err.message));
@@ -275,7 +278,7 @@ function App() {
 
     try {
       const token = localStorage.getItem('adminToken');
-      const res = await axios.post('http://localhost:5000/api/products/bulk-upload', formData, {
+      const res = await axios.post(`${BASE_URL}/api/products/bulk-upload`, formData, {
         headers: { 
           'Content-Type': 'multipart/form-data',
           Authorization: `Bearer ${token}`
@@ -296,10 +299,10 @@ function App() {
 
     try {
       if (editingId) {
-        await axios.put(`http://localhost:5000/api/products/${editingId}`, productData, getAuthHeader());
+        await axios.put(`${BASE_URL}/api/products/${editingId}`, productData, getAuthHeader());
         alert('✅ Product Updated in Database!');
       } else {
-        await axios.post('http://localhost:5000/api/products', productData, getAuthHeader());
+        await axios.post(`${BASE_URL}/api/products`, productData, getAuthHeader());
         alert('🎉 New Product Created in Database!');
       }
       resetProductForm();
@@ -322,7 +325,7 @@ function App() {
   const handleDeleteProduct = async (id) => {
     if (window.confirm('Delete product permanently?')) {
       try {
-        await axios.delete(`http://localhost:5000/api/products/${id}`, getAuthHeader());
+        await axios.delete(`${BASE_URL}/api/products/${id}`, getAuthHeader());
         fetchData();
       } catch (error) {
         alert('Delete failed: ' + (error.response?.data?.message || error.message));
@@ -344,7 +347,7 @@ function App() {
   // Order Status Update Handler
   const handleOrderStatusChange = async (orderId, newStatus) => {
     try {
-      await axios.put(`http://localhost:5000/api/orders/${orderId}`, { status: newStatus }, getAuthHeader());
+      await axios.put(`${BASE_URL}/api/orders/${orderId}`, { status: newStatus }, getAuthHeader());
       alert(`Order #${orderId} status updated to ${newStatus}`);
       fetchData();
     } catch (error) {
@@ -367,7 +370,7 @@ function App() {
     };
 
     try {
-      const res = await axios.post('http://localhost:5000/api/coupons', couponPayload, getAuthHeader());
+      const res = await axios.post(`${BASE_URL}/api/coupons`, couponPayload, getAuthHeader());
       alert(`🎉 Coupon '${couponPayload.code}' Published Live!`);
       if (res.data && res.data.coupons) {
         setCoupons(res.data.coupons);
@@ -387,7 +390,7 @@ function App() {
   const handleDeleteCoupon = async (id) => {
     if (window.confirm('Delete this coupon code?')) {
       try {
-        const res = await axios.delete(`http://localhost:5000/api/coupons/${id}`, getAuthHeader());
+        const res = await axios.delete(`${BASE_URL}/api/coupons/${id}`, getAuthHeader());
         if (res.data && res.data.coupons) {
           setCoupons(res.data.coupons);
         } else {
@@ -410,7 +413,7 @@ function App() {
           <form onSubmit={handleLogin}>
             <div className="mb-3">
               <label className="form-label fw-bold">Email Address</label>
-              <input type="email" className="form-control" required value={loginEmail} onChange={(e) => setLoginEmail(e.target.value)} placeholder="admin@test.com" />
+              <input type="email" className="form-control" required value={loginEmail} onChange={(e) => setLoginEmail(e.target.value)} placeholder="admin@techstore.com" />
             </div>
             <div className="mb-4">
               <label className="form-label fw-bold">Password</label>
