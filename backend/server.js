@@ -17,31 +17,42 @@ const app = express();
 // Connect Database
 connectDB();
 
-// CORS & Security Headers
+// 1. CORS CONFIGURATION (Explicit Cross-Origin Allowed)
+app.use(cors({
+  origin: '*',
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
+
+// Pre-Flight Options Route
+app.options('*', cors());
+
+// Security Headers
 app.use(helmet({ crossOriginResourcePolicy: false }));
-app.use(cors({ origin: '*', credentials: true }));
+
+// 2. HIGHER PAYLOAD LIMIT FOR BASE64 IMAGES
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
-// Multer Memory Storage Setup
+// Multer Memory Storage Setup (Cloud Native Base64 Conversion)
 const storage = multer.memoryStorage();
 const upload = multer({ 
   storage,
-  limits: { fileSize: 10 * 1024 * 1024 }
+  limits: { fileSize: 15 * 1024 * 1024 } // 15MB file limit
 });
 
-// DIRECT IMAGE UPLOAD ROUTE (Client-Side & Server Base64 Safe)
+// DIRECT IMAGE UPLOAD ROUTES
 app.post('/api/upload', upload.single('image'), (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ message: 'No file selected' });
     }
     const base64Image = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
-    console.log('📸 Upload Received & Processed');
+    console.log('📸 Upload Received & Processed Successfully');
     return res.status(200).json({ imageUrl: base64Image });
   } catch (error) {
     console.error('Upload Endpoint Error:', error);
-    return res.status(500).json({ message: 'Server upload error' });
+    return res.status(500).json({ message: 'Server upload error: ' + error.message });
   }
 });
 
@@ -125,6 +136,11 @@ app.get('/api/banners', async (req, res) => {
 app.post('/api/banners', async (req, res) => {
   try {
     const { title, subtitle, badge, img, bg } = req.body;
+    
+    if (!title || !img) {
+      return res.status(400).json({ message: 'Title and Image are required' });
+    }
+
     const newBanner = new Banner({
       title: title || 'Special Offer',
       subtitle: subtitle || '',
@@ -135,9 +151,11 @@ app.post('/api/banners', async (req, res) => {
 
     await newBanner.save();
     const updatedBanners = await Banner.find({}).sort({ createdAt: -1 });
+    console.log('✅ New Banner Published to Mongo DB:', newBanner.title);
     return res.status(201).json({ message: 'Banner added successfully!', banners: updatedBanners });
   } catch (error) {
-    return res.status(500).json({ message: 'Failed to add banner' });
+    console.error('Banner Error:', error);
+    return res.status(500).json({ message: 'Failed to add banner: ' + error.message });
   }
 });
 
@@ -261,7 +279,7 @@ app.use('/api/products', require('./routes/productRoutes'));
 app.use('/api/orders', require('./routes/orderRoutes'));
 app.use('/api/auth', require('./routes/authRoutes'));
 
-// Root Healthcheck
+// Root Healthcheck Route
 app.get('/', (req, res) => {
   res.send('🚀 TechStore Backend Server is Active & Healthy!');
 });
