@@ -155,8 +155,8 @@ function App() {
     const enteredCode = prompt("🔒 Enter Admin Security Secret Code to Access Signup:");
     if (enteredCode === null) return; // Cancelled
 
-    // Yahan hum default code 'TechStoreSecret999' check kar rahe hain (jo backend me bhi set hai)
-    if (enteredCode.trim() === 'TechStoreSecret999') {
+    // Yahan hum default code 'iamthebest~$@%^&15121' check kar rahe hain (jo backend me bhi set hai)
+    if (enteredCode.trim() === 'iamthebest~$@%^&15121') {
       setIsSignup(true);
       setSignupSecretCode(enteredCode.trim());
     } else {
