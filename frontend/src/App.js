@@ -26,7 +26,7 @@ function App() {
   const [signupName, setSignupName] = useState('');
   const [signupEmail, setSignupEmail] = useState('');
   const [signupPassword, setSignupPassword] = useState('');
-  const [signupRole, setSignupRole] = useState('Staff');
+  const [signupRole, setSignupRole] = useState('InventoryManager');
 
   const [activeTab, setActiveTab] = useState('dashboard');
   const [products, setProducts] = useState([]);
@@ -76,7 +76,7 @@ function App() {
         let userRole = parsedUser.role || 'SuperAdmin';
         
         const emailLower = (parsedUser.email || '').toLowerCase();
-        if (emailLower.includes('inventory') || emailLower.includes('gf')) userRole = 'InventoryManager';
+        if (emailLower.includes('inventory') || emailLower.includes('gf') || emailLower.includes('manager')) userRole = 'InventoryManager';
         else if (emailLower.includes('staff') || emailLower.includes('support')) userRole = 'Staff';
 
         setUser({ ...parsedUser, role: userRole });
@@ -92,7 +92,7 @@ function App() {
     }
   }, []);
 
-  // MONGODB CONNECTED LOGIN HANDLER WITH STRICT ROLE OVERRIDE
+  // MONGODB CONNECTED LOGIN HANDLER WITH STRICT ROLE FIXER
   const handleLogin = async (e) => {
     e.preventDefault();
     try {
@@ -106,7 +106,7 @@ function App() {
       const userData = resData.user || resData;
       let actualRole = userData.role || resData.role;
 
-      // 🔍 SMART OVERRIDE: Check email patterns to assign correct role directly
+      // 🔍 SMART OVERRIDE: Email patterns ya database role ke hisab se exact role assign karna
       const emailLower = loginEmail.toLowerCase();
       if (emailLower.includes('inventory') || emailLower.includes('gf') || emailLower.includes('manager')) {
         actualRole = 'InventoryManager';
@@ -147,7 +147,7 @@ function App() {
     }
   };
 
-  // MONGODB CONNECTED SIGNUP HANDLER
+  // MONGODB CONNECTED SIGNUP HANDLER (Fixed to send selected role properly)
   const handleSignup = async (e) => {
     e.preventDefault();
     try {
@@ -155,7 +155,7 @@ function App() {
         name: signupName,
         email: signupEmail,
         password: signupPassword,
-        role: signupRole
+        role: signupRole // Yahin se role database me jayega
       });
 
       alert(response.data.message || 'Signup successful! Please login now.');
