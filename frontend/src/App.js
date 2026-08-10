@@ -6,6 +6,15 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 // LIVE BACKEND BASE URL (NO TRAILING SLASH TO PREVENT DOUBLE SLASH 404)
 const BASE_URL = 'https://my-ecommerce-project-nmfj.onrender.com';
 
+// HELPER: SANITIZE OLD LOCALHOST IMAGE URLS TO LIVE RENDER URLS
+const getCleanImageUrl = (url) => {
+  if (!url) return '';
+  if (typeof url === 'string' && url.includes('localhost:5000')) {
+    return url.replace('http://localhost:5000', BASE_URL);
+  }
+  return url;
+};
+
 function App() {
   // Authentication State
   const [user, setUser] = useState(null);
@@ -323,7 +332,7 @@ function App() {
     setPrice(p.price);
     setCategory(p.category);
     setDescription(p.description);
-    setImage(p.image);
+    setImage(getCleanImageUrl(p.image));
     setStock(p.stock || 10);
   };
 
@@ -605,7 +614,7 @@ function App() {
                             <small className="opacity-75">{b.subtitle}</small>
                           </div>
                           <div className="d-flex align-items-center gap-3">
-                            <img src={b.img} alt="Preview" className="rounded border bg-white" width="60" height="60" style={{ objectFit: 'cover' }} />
+                            <img src={getCleanImageUrl(b.img)} alt="Preview" className="rounded border bg-white" width="60" height="60" style={{ objectFit: 'cover' }} />
                             <button className="btn btn-danger btn-sm fw-bold" onClick={() => handleDeleteBanner(b._id || b.id)}>Delete</button>
                           </div>
                         </div>
