@@ -19,6 +19,13 @@ function App() {
   const [user, setUser] = useState(null);
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
+  
+  // 🚀 NEW SIGNUP STATES ADDED
+  const [isSignup, setIsSignup] = useState(false);
+  const [signupName, setSignupName] = useState('');
+  const [signupEmail, setSignupEmail] = useState('');
+  const [signupPassword, setSignupPassword] = useState('');
+  const [signupRole, setSignupRole] = useState('Staff');
 
   const [activeTab, setActiveTab] = useState('dashboard');
   const [products, setProducts] = useState([]);
@@ -67,53 +74,17 @@ function App() {
     }
   }, []);
 
-  // 🚀 BULLETPROOF ROBUST LOGIN HANDLER (Supports Local Fallback & Server Login)
+  // 🚀 MONGODB CONNECTED LOGIN HANDLER
   const handleLogin = async (e) => {
     e.preventDefault();
-    
-    // Check local standard test credentials first to ensure instant frictionless login
-    const cleanEmail = loginEmail.trim().toLowerCase();
-    if (
-      cleanEmail === 'admin@techstore.com' || 
-      cleanEmail === 'inventory@techstore.com' || 
-      cleanEmail === 'staff@techstore.com' ||
-      loginPassword === 'adminpassword123' ||
-      loginPassword === 'staffpassword123'
-    ) {
-      let role = 'SuperAdmin';
-      let name = 'Super Admin';
-
-      if (cleanEmail === 'inventory@techstore.com') {
-        role = 'InventoryManager';
-        name = 'Inventory Manager';
-      } else if (cleanEmail === 'staff@techstore.com') {
-        role = 'Staff';
-        name = 'Support Staff';
-      }
-
-      const mockUser = {
-        _id: 'admin_local_id',
-        name,
-        email: cleanEmail,
-        role
-      };
-
-      localStorage.setItem('adminToken', 'mock_admin_token_123');
-      localStorage.setItem('adminUser', JSON.stringify(mockUser));
-      setUser(mockUser);
-      alert(`Welcome back, ${name} (${role})!`);
-      return;
-    }
-
-    // Otherwise try hitting backend API
     try {
       const response = await axios.post(`${BASE_URL}/api/auth/login`, {
         email: loginEmail,
         password: loginPassword
       });
 
-      const { token, user: userData, name, role, email } = response.data;
-      const loggedUser = userData || { name: name || 'Admin User', email: email || loginEmail, role: role || 'SuperAdmin' };
+      const { token, _id, name, role, email } = response.data;
+      const loggedUser = { _id, name, email, role };
 
       localStorage.setItem('adminToken', token);
       localStorage.setItem('adminUser', JSON.stringify(loggedUser));
@@ -122,7 +93,30 @@ function App() {
       alert(`Welcome back, ${loggedUser.name}! (${loggedUser.role})`);
     } catch (error) {
       console.error('Login Error:', error);
-      alert('Login Failed: Invalid Email or Password! Please use admin@techstore.com / adminpassword123');
+      alert('Login Failed: ' + (error.response?.data?.message || 'Invalid Email or Password!'));
+    }
+  };
+
+  // 🚀 MONGODB CONNECTED SIGNUP HANDLER
+  const handleSignup = async (e) => {
+    e.preventDefault();
+    try {
+      const response = await axios.post(`${BASE_URL}/api/auth/signup`, {
+        name: signupName,
+        email: signupEmail,
+        password: signupPassword,
+        role: signupRole
+      });
+
+      alert(response.data.message || 'Signup successful! Please login now.');
+      setIsSignup(false); // Switch back to login view
+      setLoginEmail(signupEmail);
+      setSignupName('');
+      setSignupEmail('');
+      setSignupPassword('');
+    } catch (error) {
+      console.error('Signup Error:', error);
+      alert('Signup Failed: ' + (error.response?.data?.message || 'Something went wrong!'));
     }
   };
 
@@ -451,17 +445,56 @@ function App() {
             <h3 className="fw-bold text-primary">TechStore Portal</h3>
             <p className="text-muted small">Admin & Staff Access Guard</p>
           </div>
-          <form onSubmit={handleLogin}>
-            <div className="mb-3">
-              <label className="form-label fw-bold">Email Address</label>
-              <input type="email" className="form-control" required value={loginEmail} onChange={(e) => setLoginEmail(e.target.value)} placeholder="admin@techstore.com" />
-            </div>
-            <div className="mb-4">
-              <label className="form-label fw-bold">Password</label>
-              <input type="password" className="form-control" required value={loginPassword} onChange={(e) => setLoginPassword(e.target.value)} placeholder="••••••••" />
-            </div>
-            <button type="submit" className="btn btn-primary w-100 fw-bold py-2">Login to Portal</button>
-          </form>
+
+          {/* TOGGLE BETWEEN LOGIN & SIGNUP */}
+          {!isSignup ? (
+            <form onSubmit={handleLogin}>
+              <div className="mb-3">
+                <label className="form-label fw-bold">Email Address</label>
+                <input type="email" className="form-control" required value={loginEmail} onChange={(e) => setLoginEmail(e.target.value)} placeholder="admin@techstore.com" />
+              </div>
+              <div className="mb-4">
+                <label className="form-label fw-bold">Password</label>
+                <input type="password" className="form-control" required value={loginPassword} onChange={(e) => setLoginPassword(e.target.value)} placeholder="••••••••" />
+              </div>
+              <button type="submit" className="btn btn-primary w-100 fw-bold py-2 mb-3">Login to Portal</button>
+              <div className="text-center">
+                <button type="button" className="btn btn-link text-decoration-none small" onClick={() => setIsSignup(true)}>
+                  Don't have an account? <b>Sign Up here</b>
+                </button>
+              </div>
+            </form>
+          ) : (
+            <form onSubmit={handleSignup}>
+              <div className="mb-2">
+                <label className="form-label fw-bold">Full Name</label>
+                <input type="text" className="form-control" required value={signupName} onChange={(e) => setSignupName(e.target.value)} placeholder="John Doe" />
+              </div>
+              <div className="mb-2">
+                <label className="form-label fw-bold">Email Address</label>
+                <input type="email" className="form-control" required value={signupEmail} onChange={(e) => setSignupEmail(e.target.value)} placeholder="admin@techstore.com" />
+              </div>
+              <div className="mb-2">
+                <label className="form-label fw-bold">Password</label>
+                <input type="password" className="form-control" required value={signupPassword} onChange={(e) => setSignupPassword(e.target.value)} placeholder="••••••••" />
+              </div>
+              <div className="mb-3">
+                <label className="form-label fw-bold">Select Role</label>
+                <select className="form-select fw-bold text-primary" value={signupRole} onChange={(e) => setSignupRole(e.target.value)}>
+                  <option value="SuperAdmin">SuperAdmin</option>
+                  <option value="InventoryManager">InventoryManager</option>
+                  <option value="Staff">Support Staff</option>
+                </select>
+              </div>
+              <button type="submit" className="btn btn-success w-100 fw-bold py-2 mb-3">Register New Account</button>
+              <div className="text-center">
+                <button type="button" className="btn btn-link text-decoration-none small" onClick={() => setIsSignup(false)}>
+                  Already have an account? <b>Login here</b>
+                </button>
+              </div>
+            </form>
+          )}
+
         </div>
       </div>
     );
