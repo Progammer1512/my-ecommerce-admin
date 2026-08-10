@@ -100,13 +100,18 @@ function App() {
       const resData = response.data || {};
       const token = resData.token || 'mock_token_123';
       const userData = resData.user || resData;
+      const actualRole = userData.role || resData.role || 'SuperAdmin';
 
       const loggedUser = {
         _id: userData._id || userData.id || 'admin_id_123',
         name: userData.name || 'Admin User',
         email: userData.email || loginEmail,
-        role: userData.role || 'SuperAdmin'
+        role: actualRole
       };
+
+      // Clear old session storage to prevent role caching issues
+      localStorage.removeItem('adminToken');
+      localStorage.removeItem('adminUser');
 
       localStorage.setItem('adminToken', token);
       localStorage.setItem('adminUser', JSON.stringify(loggedUser));
@@ -123,6 +128,7 @@ function App() {
       }
 
       alert(`Welcome back, ${loggedUser.name}! (${loggedUser.role})`);
+      window.location.reload();
     } catch (error) {
       console.error('Login Error:', error);
       alert('Login Failed: ' + (error.response?.data?.message || 'Invalid Email or Password!'));
@@ -156,6 +162,7 @@ function App() {
     localStorage.removeItem('adminUser');
     localStorage.removeItem('adminToken');
     setUser(null);
+    window.location.reload();
   };
 
   const fetchData = async () => {
