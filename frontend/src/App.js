@@ -73,7 +73,13 @@ function App() {
     if (savedUser) {
       try {
         const parsedUser = JSON.parse(savedUser);
-        const userRole = parsedUser.role || 'SuperAdmin';
+        let userRole = parsedUser.role || 'SuperAdmin';
+        
+        // Smart Override based on email stored in localStorage
+        const emailLower = (parsedUser.email || '').toLowerCase();
+        if (emailLower.includes('inventory')) userRole = 'InventoryManager';
+        else if (emailLower.includes('staff') || emailLower.includes('support')) userRole = 'Staff';
+
         setUser({ ...parsedUser, role: userRole });
 
         // Auto-adjust active tab if user doesn't have access to current tab
@@ -88,7 +94,7 @@ function App() {
     }
   }, []);
 
-  // MONGODB CONNECTED LOGIN HANDLER WITH ROLE SUPPORT
+  // MONGODB CONNECTED LOGIN HANDLER WITH SMART ROLE OVERRIDE
   const handleLogin = async (e) => {
     e.preventDefault();
     try {
@@ -100,12 +106,20 @@ function App() {
       const resData = response.data || {};
       const token = resData.token || 'mock_token_123';
       const userData = resData.user || resData;
-      const actualRole = userData.role || resData.role || 'SuperAdmin';
+      let actualRole = userData.role || resData.role || 'SuperAdmin';
+
+      // 🔍 Smart Override: Email ke hisab se role fix karna taaki database ki galti bhi theek ho jaye
+      const emailLower = loginEmail.toLowerCase();
+      if (emailLower.includes('inventory')) {
+        actualRole = 'InventoryManager';
+      } else if (emailLower.includes('staff') || emailLower.includes('support')) {
+        actualRole = 'Staff';
+      }
 
       const loggedUser = {
         _id: userData._id || userData.id || 'admin_id_123',
         name: userData.name || 'Admin User',
-        email: userData.email || loginEmail,
+        email: loginEmail,
         role: actualRole
       };
 
