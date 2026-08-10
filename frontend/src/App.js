@@ -1,0 +1,1111 @@
+import React, { useState, useEffect } from 'react';
+import axios from 'axios';
+import 'bootstrap/dist/css/bootstrap.min.css';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
+
+function App() {
+  // Authentication State
+  const [user, setUser] = useState(null);
+  const [loginEmail, setLoginEmail] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
+
+  const [activeTab, setActiveTab] = useState('dashboard');
+  const [products, setProducts] = useState([]);
+  const [orders, setOrders] = useState([]);
+  const [banners, setBanners] = useState([]);
+  const [reviews, setReviews] = useState([]);
+  const [csvFile, setCsvFile] = useState(null);
+
+  // SEARCH & STATUS FILTER ORDERS STATE
+  const [orderSearchTerm, setOrderSearchTerm] = useState('');
+  const [orderStatusFilter, setOrderStatusFilter] = useState('ALL');
+
+  // Dynamic Categories State
+  const [categories, setCategories] = useState(['Electronics', 'Footwear', 'Accessories', 'Fashion']);
+  const [showCustomCategory, setShowCustomCategory] = useState(false);
+  const [newCategoryInput, setNewCategoryInput] = useState('');
+
+  // Dynamic Category & Usage Limit Coupons State
+  const [coupons, setCoupons] = useState([]);
+
+  // Product Form States
+  const [editingId, setEditingId] = useState(null);
+  const [name, setName] = useState('');
+  const [price, setPrice] = useState('');
+  const [category, setCategory] = useState('Electronics');
+  const [description, setDescription] = useState('');
+  const [image, setImage] = useState('');
+  const [stock, setStock] = useState(10);
+
+  // Banner Form States
+  const [bannerTitle, setBannerTitle] = useState('');
+  const [bannerSubtitle, setBannerSubtitle] = useState('');
+  const [bannerBadge, setBannerBadge] = useState('');
+  const [bannerImage, setBannerImage] = useState('');
+  const [bannerBg, setBannerBg] = useState('linear-gradient(135deg, #0d6efd 0%, #0a58ca 100%)');
+
+  // New Coupon Form States
+  const [newCouponCode, setNewCouponCode] = useState('');
+  const [newCouponDiscount, setNewCouponDiscount] = useState('');
+  const [newCouponCategory, setNewCouponCategory] = useState('All');
+  const [newCouponMaxUsage, setNewCouponMaxUsage] = useState(50);
+
+  // Helper function to get Auth Headers
+  const getAuthHeader = () => {
+    const token = localStorage.getItem('adminToken');
+    return token ? { headers: { Authorization: `Bearer ${token}` } } : {};
+  };
+
+  // Check saved login session on load
+  useEffect(() => {
+    const savedUser = localStorage.getItem('adminUser');
+    if (savedUser) {
+      setUser(JSON.parse(savedUser));
+    }
+  }, []);
+
+  // REAL BACKEND API LOGIN HANDLER
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    try {
+      const response = await axios.post('http://localhost:5000/api/auth/login', {
+        email: loginEmail,
+        password: loginPassword
+      });
+
+      const { token, user: userData, name, role, email } = response.data;
+      const loggedUser = userData || { name: name || 'Admin User', email: email || loginEmail, role: role || 'SuperAdmin' };
+
+      localStorage.setItem('adminToken', token);
+      localStorage.setItem('adminUser', JSON.stringify(loggedUser));
+      
+      setUser(loggedUser);
+      alert(`Welcome back, ${loggedUser.name}! (${loggedUser.role})`);
+    } catch (error) {
+      console.error('Login Error:', error);
+      alert('Login Failed: ' + (error.response?.data?.message || 'Invalid Email or Password!'));
+    }
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('adminUser');
+    localStorage.removeItem('adminToken');
+    setUser(null);
+  };
+
+  // FETCH DATA WITH AUTH BEARER HEADER
+  const fetchData = async () => {
+    try {
+      const authConfig = getAuthHeader();
+
+      // 1. Fetch Products
+      const prodRes = await axios.get('http://localhost:5000/api/products', authConfig);
+      const fetchedProducts = prodRes.data.products || prodRes.data;
+      setProducts(Array.isArray(fetchedProducts) ? fetchedProducts : []);
+
+      const existingCategories = Array.isArray(fetchedProducts) ? fetchedProducts.map(p => p.category).filter(Boolean) : [];
+      setCategories(prev => Array.from(new Set([...prev, ...existingCategories])));
+
+      // 2. Fetch Orders
+      const orderRes = await axios.get('http://localhost:5000/api/orders', authConfig);
+      const fetchedOrders = Array.isArray(orderRes.data) ? orderRes.data : (orderRes.data.orders || []);
+      setOrders(fetchedOrders);
+
+      // 3. Fetch Banners
+      const bannerRes = await axios.get('http://localhost:5000/api/banners', authConfig);
+      setBanners(Array.isArray(bannerRes.data) ? bannerRes.data : []);
+
+      // 4. Fetch Reviews
+      const revRes = await axios.get('http://localhost:5000/api/reviews', authConfig);
+      setReviews(Array.isArray(revRes.data) ? revRes.data : []);
+
+      // 5. Fetch Coupons
+      const couponRes = await axios.get('http://localhost:5000/api/coupons', authConfig);
+      if (Array.isArray(couponRes.data)) {
+        setCoupons(couponRes.data);
+      }
+    } catch (error) {
+      console.error('Error fetching admin data:', error);
+    }
+  };
+
+  useEffect(() => {
+    if (user) {
+      fetchData();
+      const interval = setInterval(fetchData, 4000);
+      return () => clearInterval(interval);
+    }
+  }, [user]);
+
+  // Analytics Calculations
+  const totalRevenue = orders.reduce((acc, curr) => acc + (curr.totalPrice || 0), 0);
+  const totalOrdersCount = orders.length;
+  const returnRequestsCount = orders.filter(o => o.status && o.status.includes('Return')).length;
+
+  // Filter Orders
+  const filteredOrders = orders.filter(o => {
+    const currentStatus = o.status || 'Processing';
+    let statusMatch = true;
+
+    if (orderStatusFilter === 'Delivered') {
+      statusMatch = currentStatus === 'Delivered';
+    } else if (orderStatusFilter === 'In Transit') {
+      statusMatch = currentStatus === 'In Transit' || currentStatus === 'Shipped' || currentStatus === 'Out for Delivery';
+    } else if (orderStatusFilter === 'Return') {
+      statusMatch = currentStatus.includes('Return');
+    } else if (orderStatusFilter === 'Refund') {
+      statusMatch = currentStatus.includes('Refund');
+    } else if (orderStatusFilter === 'Cancelled') {
+      statusMatch = currentStatus === 'Cancelled';
+    } else if (orderStatusFilter === 'Pending') {
+      statusMatch = currentStatus === 'Pending' || currentStatus === 'Processing';
+    }
+
+    let searchMatch = true;
+    if (orderSearchTerm.trim()) {
+      const cleanTerm = orderSearchTerm.trim().toLowerCase();
+      const orderIdMatch = (o._id || '').toLowerCase().includes(cleanTerm);
+      const nameMatch = (o.shippingAddress?.name || '').toLowerCase().includes(cleanTerm);
+      const emailMatch = (o.userEmail || '').toLowerCase().includes(cleanTerm);
+      searchMatch = orderIdMatch || nameMatch || emailMatch;
+    }
+
+    return statusMatch && searchMatch;
+  });
+
+  const chartData = [
+    { name: 'Mon', Revenue: 4000, Orders: 4 },
+    { name: 'Tue', Revenue: 3000, Orders: 3 },
+    { name: 'Wed', Revenue: 2000, Orders: 2 },
+    { name: 'Thu', Revenue: 2780, Orders: 5 },
+    { name: 'Fri', Revenue: 1890, Orders: 2 },
+    { name: 'Sat', Revenue: 6390, Orders: 9 },
+    { name: 'Sun', Revenue: 3490, Orders: 4 },
+  ];
+
+  // Image Upload Handler
+  const handleImageFileUpload = async (e, targetSetter) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const formData = new FormData();
+    formData.append('image', file);
+
+    try {
+      const token = localStorage.getItem('adminToken');
+      const res = await axios.post('http://localhost:5000/api/upload', formData, {
+        headers: { 
+          'Content-Type': 'multipart/form-data',
+          Authorization: `Bearer ${token}`
+        }
+      });
+      if (res.data && res.data.imageUrl) {
+        targetSetter(res.data.imageUrl);
+        alert('📸 Image uploaded successfully!');
+      }
+    } catch (error) {
+      alert('Image upload failed: ' + (error.response?.data?.message || error.message));
+    }
+  };
+
+  // Add Banner Handler
+  const handleAddBanner = async (e) => {
+    e.preventDefault();
+    if (!bannerTitle || !bannerImage) return alert('Title and Image are required!');
+
+    try {
+      const res = await axios.post('http://localhost:5000/api/banners', {
+        title: bannerTitle,
+        subtitle: bannerSubtitle,
+        badge: bannerBadge,
+        img: bannerImage,
+        bg: bannerBg
+      }, getAuthHeader());
+      alert('🎉 New Hero Banner Published to Customer Site!');
+      setBanners(res.data.banners || []);
+      setBannerTitle('');
+      setBannerSubtitle('');
+      setBannerBadge('');
+      setBannerImage('');
+    } catch (err) {
+      alert('Failed: ' + (err.response?.data?.message || err.message));
+    }
+  };
+
+  const handleDeleteBanner = async (id) => {
+    if (window.confirm('Delete this banner slide?')) {
+      try {
+        const res = await axios.delete(`http://localhost:5000/api/banners/${id}`, getAuthHeader());
+        setBanners(res.data.banners || []);
+      } catch (err) {
+        alert('Delete failed: ' + (err.response?.data?.message || err.message));
+      }
+    }
+  };
+
+  // Category Handlers
+  const handleCategoryChange = (e) => {
+    const value = e.target.value;
+    if (value === 'ADD_NEW') {
+      setShowCustomCategory(true);
+    } else {
+      setShowCustomCategory(false);
+      setCategory(value);
+    }
+  };
+
+  const handleAddNewCategory = () => {
+    if (!newCategoryInput.trim()) return alert('Category name cannot be empty!');
+    const trimmed = newCategoryInput.trim();
+    if (!categories.includes(trimmed)) {
+      setCategories([...categories, trimmed]);
+    }
+    setCategory(trimmed);
+    setNewCategoryInput('');
+    setShowCustomCategory(false);
+  };
+
+  // Bulk CSV Upload Handler
+  const handleCsvUpload = async (e) => {
+    e.preventDefault();
+    if (!csvFile) return alert('Please select a CSV file first!');
+
+    const formData = new FormData();
+    formData.append('file', csvFile);
+
+    try {
+      const token = localStorage.getItem('adminToken');
+      const res = await axios.post('http://localhost:5000/api/products/bulk-upload', formData, {
+        headers: { 
+          'Content-Type': 'multipart/form-data',
+          Authorization: `Bearer ${token}`
+        }
+      });
+      alert(res.data.message);
+      fetchData();
+      setCsvFile(null);
+    } catch (error) {
+      alert('Bulk upload failed: ' + (error.response?.data?.message || error.message));
+    }
+  };
+
+  // Product Submit
+  const handleProductSubmit = async (e) => {
+    e.preventDefault();
+    const productData = { name, price: Number(price), category, description, image, stock: Number(stock) };
+
+    try {
+      if (editingId) {
+        await axios.put(`http://localhost:5000/api/products/${editingId}`, productData, getAuthHeader());
+        alert('✅ Product Updated in Database!');
+      } else {
+        await axios.post('http://localhost:5000/api/products', productData, getAuthHeader());
+        alert('🎉 New Product Created in Database!');
+      }
+      resetProductForm();
+      fetchData();
+    } catch (error) {
+      alert('Failed: ' + (error.response?.data?.message || error.message));
+    }
+  };
+
+  const handleEditProduct = (p) => {
+    setEditingId(p._id);
+    setName(p.name);
+    setPrice(p.price);
+    setCategory(p.category);
+    setDescription(p.description);
+    setImage(p.image);
+    setStock(p.stock || 10);
+  };
+
+  const handleDeleteProduct = async (id) => {
+    if (window.confirm('Delete product permanently?')) {
+      try {
+        await axios.delete(`http://localhost:5000/api/products/${id}`, getAuthHeader());
+        fetchData();
+      } catch (error) {
+        alert('Delete failed: ' + (error.response?.data?.message || error.message));
+      }
+    }
+  };
+
+  const resetProductForm = () => {
+    setEditingId(null);
+    setName('');
+    setPrice('');
+    setCategory('Electronics');
+    setDescription('');
+    setImage('');
+    setStock(10);
+    setShowCustomCategory(false);
+  };
+
+  // Order Status Update Handler
+  const handleOrderStatusChange = async (orderId, newStatus) => {
+    try {
+      await axios.put(`http://localhost:5000/api/orders/${orderId}`, { status: newStatus }, getAuthHeader());
+      alert(`Order #${orderId} status updated to ${newStatus}`);
+      fetchData();
+    } catch (error) {
+      alert('Status update failed: ' + (error.response?.data?.message || error.message));
+    }
+  };
+
+  // Coupon Handler
+  const handleAddCoupon = async (e) => {
+    e.preventDefault();
+    if (!newCouponCode || !newCouponDiscount) return alert('Code and Discount are required!');
+
+    const couponPayload = {
+      code: newCouponCode.toUpperCase().trim(),
+      discount: Number(newCouponDiscount),
+      category: newCouponCategory || 'All',
+      maxUsage: Number(newCouponMaxUsage) || 100,
+      type: 'Percentage',
+      status: 'Active'
+    };
+
+    try {
+      const res = await axios.post('http://localhost:5000/api/coupons', couponPayload, getAuthHeader());
+      alert(`🎉 Coupon '${couponPayload.code}' Published Live!`);
+      if (res.data && res.data.coupons) {
+        setCoupons(res.data.coupons);
+      } else {
+        fetchData();
+      }
+    } catch (err) {
+      alert('Coupon error: ' + (err.response?.data?.message || err.message));
+    }
+
+    setNewCouponCode('');
+    setNewCouponDiscount('');
+    setNewCouponCategory('All');
+    setNewCouponMaxUsage(50);
+  };
+
+  const handleDeleteCoupon = async (id) => {
+    if (window.confirm('Delete this coupon code?')) {
+      try {
+        const res = await axios.delete(`http://localhost:5000/api/coupons/${id}`, getAuthHeader());
+        if (res.data && res.data.coupons) {
+          setCoupons(res.data.coupons);
+        } else {
+          fetchData();
+        }
+      } catch (err) {
+        alert('Delete coupon failed: ' + (err.response?.data?.message || err.message));
+      }
+    }
+  };
+
+  if (!user) {
+    return (
+      <div className="bg-dark min-vh-100 d-flex align-items-center justify-content-center">
+        <div className="card shadow-lg p-4 border-0" style={{ maxWidth: '400px', width: '100%' }}>
+          <div className="text-center mb-4">
+            <h3 className="fw-bold text-primary">TechStore Portal</h3>
+            <p className="text-muted small">Admin & Staff Access Guard</p>
+          </div>
+          <form onSubmit={handleLogin}>
+            <div className="mb-3">
+              <label className="form-label fw-bold">Email Address</label>
+              <input type="email" className="form-control" required value={loginEmail} onChange={(e) => setLoginEmail(e.target.value)} placeholder="admin@test.com" />
+            </div>
+            <div className="mb-4">
+              <label className="form-label fw-bold">Password</label>
+              <input type="password" className="form-control" required value={loginPassword} onChange={(e) => setLoginPassword(e.target.value)} placeholder="••••••••" />
+            </div>
+            <button type="submit" className="btn btn-primary w-100 fw-bold py-2">Login to Portal</button>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="d-flex bg-light min-vh-100">
+      {/* Sidebar Navigation */}
+      <div className="bg-dark text-white p-3 d-flex flex-column" style={{ width: '260px', minHeight: '100vh' }}>
+        <h4 className="text-warning fw-bold mb-1 px-2">
+          <i className="bi bi-speedometer2 me-2"></i>TechStore Admin
+        </h4>
+        <small className="text-muted mb-4 px-2">Role: <span className="badge bg-info text-dark">{user.role}</span></small>
+
+        <div className="nav flex-column nav-pills gap-2">
+          <button className={`nav-link text-start fw-bold ${activeTab === 'dashboard' ? 'active bg-warning text-dark' : 'text-white'}`} onClick={() => setActiveTab('dashboard')}>
+            <i className="bi bi-graph-up-arrow me-2"></i>Analytics Dashboard
+          </button>
+          <button className={`nav-link text-start fw-bold ${activeTab === 'banners' ? 'active bg-warning text-dark' : 'text-white'}`} onClick={() => setActiveTab('banners')}>
+            <i className="bi bi-images me-2"></i>🎨 Sliding Banners
+          </button>
+          <button className={`nav-link text-start fw-bold ${activeTab === 'products' ? 'active bg-warning text-dark' : 'text-white'}`} onClick={() => setActiveTab('products')}>
+            <i className="bi bi-box-seam me-2"></i>Products & Stock
+          </button>
+          <button className={`nav-link text-start fw-bold ${activeTab === 'orders' ? 'active bg-warning text-dark' : 'text-white'}`} onClick={() => setActiveTab('orders')}>
+            <i className="bi bi-receipt me-2"></i>Orders & Shipping
+          </button>
+
+          <button className={`nav-link text-start fw-bold ${activeTab === 'returns' ? 'active bg-warning text-dark' : 'text-white'}`} onClick={() => setActiveTab('returns')}>
+            <i className="bi bi-arrow-counterclockwise me-2"></i>🔄 Return Requests ({returnRequestsCount})
+          </button>
+
+          <button className={`nav-link text-start fw-bold ${activeTab === 'reviews' ? 'active bg-warning text-dark' : 'text-white'}`} onClick={() => setActiveTab('reviews')}>
+            <i className="bi bi-star-fill me-2"></i>⭐ Customer Reviews ({reviews.length})
+          </button>
+
+          {['SuperAdmin', 'admin'].includes(user.role) && (
+            <button className={`nav-link text-start fw-bold ${activeTab === 'coupons' ? 'active bg-warning text-dark' : 'text-white'}`} onClick={() => setActiveTab('coupons')}>
+              <i className="bi bi-ticket-perforated me-2"></i>Marketing & Coupons ({coupons.length})
+            </button>
+          )}
+        </div>
+
+        <div className="mt-auto pt-3 border-top border-secondary">
+          <div className="d-flex align-items-center justify-content-between">
+            <span className="small fw-bold">{user.name}</span>
+            <button className="btn btn-outline-danger btn-sm fw-bold" onClick={handleLogout}>Logout</button>
+          </div>
+        </div>
+      </div>
+
+      {/* Main Content Area */}
+      <div className="flex-grow-1 p-4 overflow-auto" style={{ maxHeight: '100vh' }}>
+        
+        {/* TAB 1: ANALYTICS DASHBOARD */}
+        {activeTab === 'dashboard' && (
+          <div>
+            <h3 className="fw-bold mb-4">Enterprise Analytics Overview</h3>
+            <div className="row g-3 mb-4">
+              <div className="col-md-3">
+                <div className="card border-0 shadow-sm p-3 bg-white border-start border-4 border-success">
+                  <span className="text-muted small fw-bold">TOTAL REVENUE</span>
+                  <h3 className="fw-bold text-success m-0">₹{totalRevenue.toLocaleString()}</h3>
+                </div>
+              </div>
+              <div className="col-md-3">
+                <div className="card border-0 shadow-sm p-3 bg-white border-start border-4 border-primary">
+                  <span className="text-muted small fw-bold">LIVE ORDERS</span>
+                  <h3 className="fw-bold text-primary m-0">{totalOrdersCount}</h3>
+                </div>
+              </div>
+              <div className="col-md-3">
+                <div className="card border-0 shadow-sm p-3 bg-white border-start border-4 border-warning">
+                  <span className="text-muted small fw-bold">ACTIVE PRODUCTS</span>
+                  <h3 className="fw-bold text-warning m-0">{products.length}</h3>
+                </div>
+              </div>
+              <div className="col-md-3">
+                <div className="card border-0 shadow-sm p-3 bg-white border-start border-4 border-danger">
+                  <span className="text-muted small fw-bold">RETURN REQUESTS</span>
+                  <h3 className="fw-bold text-danger m-0">{returnRequestsCount}</h3>
+                </div>
+              </div>
+            </div>
+
+            <div className="row g-4">
+              <div className="col-md-8">
+                <div className="card border-0 shadow-sm p-4 bg-white">
+                  <h5 className="fw-bold mb-3">Revenue & Sales Trends</h5>
+                  <div style={{ width: '100%', height: 300 }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={chartData}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="name" />
+                        <YAxis />
+                        <Tooltip />
+                        <Line type="monotone" dataKey="Revenue" stroke="#198754" strokeWidth={3} />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+              </div>
+              <div className="col-md-4">
+                <div className="card border-0 shadow-sm p-4 bg-white">
+                  <h5 className="fw-bold mb-3">Daily Orders</h5>
+                  <div style={{ width: '100%', height: 300 }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={chartData}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="name" />
+                        <YAxis />
+                        <Tooltip />
+                        <Bar dataKey="Orders" fill="#0d6efd" />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* TAB 2: SLIDING BANNER MANAGEMENT */}
+        {activeTab === 'banners' && (
+          <div>
+            <h3 className="fw-bold mb-4">Customer Website Hero Banner Manager</h3>
+            <div className="row g-4">
+              <div className="col-lg-5">
+                <div className="card border-0 shadow-sm p-4 bg-white">
+                  <h5 className="fw-bold mb-3">➕ Add New Sliding Offer Banner</h5>
+                  <form onSubmit={handleAddBanner}>
+                    <div className="mb-2">
+                      <label className="form-label fw-semibold">Banner Heading Title</label>
+                      <input type="text" className="form-control" required placeholder="e.g. 🔥 Mega Diwali Electronics Sale!" value={bannerTitle} onChange={(e) => setBannerTitle(e.target.value)} />
+                    </div>
+                    <div className="mb-2">
+                      <label className="form-label fw-semibold">Subtitle Description</label>
+                      <input type="text" className="form-control" placeholder="e.g. Up to 30% OFF on all smart watches" value={bannerSubtitle} onChange={(e) => setBannerSubtitle(e.target.value)} />
+                    </div>
+                    <div className="mb-2">
+                      <label className="form-label fw-semibold">Badge Code / Tag</label>
+                      <input type="text" className="form-control" placeholder="e.g. USE CODE: DIWALI30" value={bannerBadge} onChange={(e) => setBannerBadge(e.target.value)} />
+                    </div>
+                    <div className="mb-2">
+                      <label className="form-label fw-semibold">Theme Color Style</label>
+                      <select className="form-select" value={bannerBg} onChange={(e) => setBannerBg(e.target.value)}>
+                        <option value="linear-gradient(135deg, #0d6efd 0%, #0a58ca 100%)">Royal Blue</option>
+                        <option value="linear-gradient(135deg, #198754 0%, #146c43 100%)">Forest Green</option>
+                        <option value="linear-gradient(135deg, #dc3545 0%, #b02a37 100%)">Crimson Red</option>
+                        <option value="linear-gradient(135deg, #6f42c1 0%, #593196 100%)">Deep Purple</option>
+                      </select>
+                    </div>
+                    <div className="mb-3">
+                      <label className="form-label fw-semibold">Banner Image URL</label>
+                      <input type="text" className="form-control mb-1" placeholder="https://..." value={bannerImage} onChange={(e) => setBannerImage(e.target.value)} />
+                      <div className="text-center my-1 text-muted small fw-bold">-- OR --</div>
+                      <label className="form-label fw-semibold">Upload Image from Device</label>
+                      <input type="file" className="form-control" accept="image/*" onChange={(e) => handleImageFileUpload(e, setBannerImage)} />
+                    </div>
+                    <button type="submit" className="btn btn-primary w-100 fw-bold py-2">Publish Banner to Site</button>
+                  </form>
+                </div>
+              </div>
+
+              <div className="col-lg-7">
+                <div className="card border-0 shadow-sm p-4 bg-white">
+                  <h5 className="fw-bold mb-3">Live Active Banners ({banners.length})</h5>
+                  <div className="d-flex flex-column gap-3">
+                    {banners.length === 0 ? (
+                      <p className="text-muted">No active banners. Add one using the form.</p>
+                    ) : (
+                      banners.map((b) => (
+                        <div key={b._id || b.id} className="p-3 rounded-3 text-white d-flex align-items-center justify-content-between shadow-sm" style={{ background: b.bg || 'linear-gradient(135deg, #0d6efd 0%, #0a58ca 100%)' }}>
+                          <div>
+                            <span className="badge bg-warning text-dark fw-bold mb-1">{b.badge || 'PROMO'}</span>
+                            <h5 className="fw-bold m-0">{b.title}</h5>
+                            <small className="opacity-75">{b.subtitle}</small>
+                          </div>
+                          <div className="d-flex align-items-center gap-3">
+                            <img src={b.img} alt="Preview" className="rounded border bg-white" width="60" height="60" style={{ objectFit: 'cover' }} />
+                            <button className="btn btn-danger btn-sm fw-bold" onClick={() => handleDeleteBanner(b._id || b.id)}>Delete</button>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* TAB 3: PRODUCT & STOCK MANAGEMENT */}
+        {activeTab === 'products' && (
+          <div>
+            <h3 className="fw-bold mb-4">Product Information & Inventory (PIM)</h3>
+
+            {['SuperAdmin', 'InventoryManager', 'admin', 'manager'].includes(user.role) && (
+              <div className="card border-0 shadow-sm p-4 bg-white mb-4">
+                <h5 className="fw-bold mb-3 text-success">
+                  <i className="bi bi-file-earmark-spreadsheet me-2"></i>Bulk Product Upload (CSV)
+                </h5>
+                <form onSubmit={handleCsvUpload} className="d-flex gap-3 align-items-center">
+                  <input 
+                    type="file" 
+                    className="form-control" 
+                    accept=".csv" 
+                    onChange={(e) => setCsvFile(e.target.files[0])} 
+                  />
+                  <button type="submit" className="btn btn-success fw-bold text-nowrap">
+                    <i className="bi bi-upload me-1"></i> Upload CSV
+                  </button>
+                </form>
+                <small className="text-muted mt-2 d-block">
+                  CSV Headers Required: <code>name, price, category, description, image, stock</code>
+                </small>
+              </div>
+            )}
+
+            <div className="row g-4">
+              <div className="col-lg-5">
+                <div className="card border-0 shadow-sm p-4 bg-white">
+                  <h5 className="fw-bold mb-3">{editingId ? '✏️ Edit Product' : '➕ Add New Product'}</h5>
+                  <form onSubmit={handleProductSubmit}>
+                    <div className="mb-2">
+                      <label className="form-label fw-semibold">Title</label>
+                      <input type="text" className="form-control" required value={name} onChange={(e) => setName(e.target.value)} />
+                    </div>
+                    <div className="row mb-2">
+                      <div className="col-6">
+                        <label className="form-label fw-semibold">Price (₹)</label>
+                        <input type="number" className="form-control" required value={price} onChange={(e) => setPrice(e.target.value)} />
+                      </div>
+                      <div className="col-6">
+                        <label className="form-label fw-semibold">Category</label>
+                        <select className="form-select" value={category} onChange={handleCategoryChange}>
+                          {categories.map((cat, idx) => (
+                            <option key={idx} value={cat}>{cat}</option>
+                          ))}
+                          <option value="ADD_NEW">➕ Add New Category...</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    {showCustomCategory && (
+                      <div className="mb-2 p-2 bg-light rounded border">
+                        <label className="form-label fw-bold text-primary small mb-1">Enter New Category Name:</label>
+                        <div className="input-group">
+                          <input 
+                            type="text" 
+                            className="form-control form-control-sm" 
+                            placeholder="e.g. Toys, Books, Grocery" 
+                            value={newCategoryInput} 
+                            onChange={(e) => setNewCategoryInput(e.target.value)} 
+                          />
+                          <button type="button" className="btn btn-primary btn-sm fw-bold" onClick={handleAddNewCategory}>Add</button>
+                          <button type="button" className="btn btn-outline-secondary btn-sm" onClick={() => setShowCustomCategory(false)}>X</button>
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="mb-2">
+                      <label className="form-label fw-semibold">Stock Quantity</label>
+                      <input type="number" className="form-control" required value={stock} onChange={(e) => setStock(e.target.value)} />
+                    </div>
+
+                    <div className="mb-2">
+                      <label className="form-label fw-semibold">Image URL</label>
+                      <input 
+                        type="text" 
+                        className="form-control mb-1" 
+                        value={image} 
+                        onChange={(e) => setImage(e.target.value)} 
+                        placeholder="https://..." 
+                      />
+                      <div className="text-center my-1 text-muted small fw-bold">-- OR --</div>
+                      <label className="form-label fw-semibold">Upload Image from Device</label>
+                      <input 
+                        type="file" 
+                        className="form-control" 
+                        accept="image/*" 
+                        onChange={(e) => handleImageFileUpload(e, setImage)} 
+                      />
+                    </div>
+
+                    <div className="mb-3">
+                      <label className="form-label fw-semibold">Description</label>
+                      <textarea className="form-control" rows="2" required value={description} onChange={(e) => setDescription(e.target.value)}></textarea>
+                    </div>
+                    <div className="d-flex gap-2">
+                      <button type="submit" className="btn btn-primary w-100 fw-bold">{editingId ? 'Save' : 'Create'}</button>
+                      {editingId && <button type="button" className="btn btn-secondary" onClick={resetProductForm}>Cancel</button>}
+                    </div>
+                  </form>
+                </div>
+              </div>
+
+              <div className="col-lg-7">
+                <div className="card border-0 shadow-sm p-4 bg-white">
+                  <h5 className="fw-bold mb-3">Live Inventory Management</h5>
+                  <table className="table table-hover align-middle border">
+                    <thead className="table-dark">
+                      <tr>
+                        <th>Item</th>
+                        <th>Category</th>
+                        <th>Price</th>
+                        <th>Stock Status</th>
+                        <th>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {products.map((p) => (
+                        <tr key={p._id}>
+                          <td className="fw-bold small">{p.name}</td>
+                          <td><span className="badge bg-secondary">{p.category}</span></td>
+                          <td className="text-success fw-bold">₹{p.price}</td>
+                          <td>
+                            {(p.stock || 10) < 5 ? (
+                              <span className="badge bg-danger">Low Stock ({p.stock || 2})</span>
+                            ) : (
+                              <span className="badge bg-success">In Stock ({p.stock || 15})</span>
+                            )}
+                          </td>
+                          <td>
+                            <div className="btn-group btn-group-sm">
+                              <button className="btn btn-outline-primary" onClick={() => handleEditProduct(p)}>Edit</button>
+                              {['SuperAdmin', 'admin'].includes(user.role) && (
+                                <button className="btn btn-outline-danger" onClick={() => handleDeleteProduct(p._id)}>Delete</button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* TAB 4: ORDERS WITH MULTI-FILTER */}
+        {activeTab === 'orders' && (
+          <div>
+            <div className="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+              <h3 className="fw-bold m-0">Live Customer Orders & Logistics</h3>
+              
+              <div className="d-flex align-items-center gap-2 flex-wrap">
+                <select 
+                  className="form-select form-select-sm fw-bold border-success text-dark"
+                  style={{ width: '220px' }}
+                  value={orderStatusFilter}
+                  onChange={(e) => setOrderStatusFilter(e.target.value)}
+                >
+                  <option value="ALL">🌟 All Order Statuses</option>
+                  <option value="Delivered">✅ Delivered Only</option>
+                  <option value="In Transit">🚚 In Transit / Shipped</option>
+                  <option value="Return">🔄 Return / Replacement Requests</option>
+                  <option value="Refund">💵 Refund Processed</option>
+                  <option value="Cancelled">❌ Cancelled Only</option>
+                  <option value="Pending">⏳ Pending / Processing</option>
+                </select>
+
+                <div className="input-group input-group-sm" style={{ width: '280px' }}>
+                  <input 
+                    type="text" 
+                    className="form-control fw-bold border-primary" 
+                    placeholder="Search Order ID or Customer..." 
+                    value={orderSearchTerm}
+                    onChange={(e) => setOrderSearchTerm(e.target.value)}
+                  />
+                  {orderSearchTerm && (
+                    <button className="btn btn-outline-secondary" onClick={() => setOrderSearchTerm('')}>
+                      X
+                    </button>
+                  )}
+                </div>
+
+                <button className="btn btn-outline-primary btn-sm fw-bold" onClick={fetchData}>
+                  <i className="bi bi-arrow-clockwise me-1"></i> Sync Live Orders
+                </button>
+              </div>
+            </div>
+
+            <div className="card border-0 shadow-sm p-4 bg-white">
+              <table className="table table-bordered table-hover align-middle">
+                <thead className="table-dark">
+                  <tr>
+                    <th>Order ID</th>
+                    <th>Customer Name</th>
+                    <th>Total Price</th>
+                    <th>Payment Method</th>
+                    <th>Current Status</th>
+                    <th>Update Fulfillment Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredOrders.length === 0 ? (
+                    <tr>
+                      <td colSpan="6" className="text-center py-5 text-muted">
+                        <i className="bi bi-search fs-2 d-block mb-2 text-secondary"></i>
+                        <h5>No orders found matching your selected filter.</h5>
+                        <button 
+                          className="btn btn-link btn-sm fw-bold text-primary" 
+                          onClick={() => { setOrderSearchTerm(''); setOrderStatusFilter('ALL'); }}
+                        >
+                          Clear All Filters
+                        </button>
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredOrders.map((o) => (
+                      <tr key={o._id}>
+                        <td className="fw-bold text-primary">#{o._id}</td>
+                        <td className="fw-bold">
+                          {o.shippingAddress?.name || 'Customer'}
+                          {o.userEmail && <small className="text-muted d-block">{o.userEmail}</small>}
+                        </td>
+                        <td className="text-success fw-bold fs-6">₹{o.totalPrice}</td>
+                        <td>
+                          <span className="badge bg-info text-dark px-2 py-1">{o.paymentMethod || 'COD'}</span>
+                        </td>
+                        <td>
+                          <span className={`badge px-3 py-2 ${
+                            o.status === 'Delivered' ? 'bg-success' : 
+                            o.status === 'In Transit' || o.status === 'Shipped' || o.status === 'Out for Delivery' ? 'bg-primary' :
+                            o.status && o.status.includes('Return') ? 'bg-warning text-dark' :
+                            o.status && o.status.includes('Refund') ? 'bg-info text-dark' :
+                            o.status === 'Cancelled' ? 'bg-danger' : 'bg-warning text-dark'
+                          }`}>
+                            {o.status || 'Processing'}
+                          </span>
+                        </td>
+                        <td>
+                          <select 
+                            className="form-select form-select-sm fw-bold" 
+                            value={o.status || 'Processing'}
+                            onChange={(e) => handleOrderStatusChange(o._id, e.target.value)}
+                          >
+                            <option value="Pending">Pending</option>
+                            <option value="Processing">Processing</option>
+                            <option value="Shipped">Shipped</option>
+                            <option value="In Transit">In Transit</option>
+                            <option value="Out for Delivery">Out for Delivery</option>
+                            <option value="Delivered">Delivered</option>
+                            <option value="Return Approved">Return Approved</option>
+                            <option value="Replacement Shipped">Replacement Shipped</option>
+                            <option value="Refund Processed">Refund Processed</option>
+                            <option value="Cancelled">Cancelled</option>
+                          </select>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* TAB 5: RETURNS MANAGEMENT */}
+        {activeTab === 'returns' && (
+          <div>
+            <div className="d-flex justify-content-between align-items-center mb-4">
+              <h3 className="fw-bold m-0">🔄 Customer Return & Refund Requests</h3>
+              <button className="btn btn-outline-primary btn-sm fw-bold" onClick={fetchData}>
+                <i className="bi bi-arrow-clockwise me-1"></i> Sync Return Requests
+              </button>
+            </div>
+
+            <div className="card border-0 shadow-sm p-4 bg-white">
+              <table className="table table-bordered table-hover align-middle">
+                <thead className="table-dark">
+                  <tr>
+                    <th>Order ID</th>
+                    <th>Customer Name</th>
+                    <th>Request Type</th>
+                    <th>Reason & Details</th>
+                    <th>Current Status</th>
+                    <th>Process Request Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {orders.filter(o => o.status && o.status.includes('Return')).length === 0 ? (
+                    <tr>
+                      <td colSpan="6" className="text-center py-5 text-muted">
+                        <i className="bi bi-arrow-counterclockwise fs-2 d-block mb-2 text-secondary"></i>
+                        <h5>No active return or refund requests found.</h5>
+                      </td>
+                    </tr>
+                  ) : (
+                    orders.filter(o => o.status && o.status.includes('Return')).map((o) => (
+                      <tr key={o._id}>
+                        <td className="fw-bold text-primary">#{o._id}</td>
+                        <td className="fw-bold">
+                          {o.shippingAddress?.name || 'Customer'}
+                          <small className="text-muted d-block">{o.userEmail}</small>
+                        </td>
+                        <td>
+                          <span className="badge bg-danger px-3 py-2 fw-bold">
+                            {o.returnRequest?.returnType || 'Refund / Replace'}
+                          </span>
+                        </td>
+                        <td>
+                          <strong className="text-dark d-block">{o.returnRequest?.reason || 'Defective / Damaged'}</strong>
+                          <small className="text-muted">{o.returnRequest?.comments || 'No extra comments provided.'}</small>
+                        </td>
+                        <td>
+                          <span className="badge bg-warning text-dark px-3 py-2 fw-bold fs-6">
+                            {o.status}
+                          </span>
+                        </td>
+                        <td>
+                          <select 
+                            className="form-select form-select-sm fw-bold border-danger" 
+                            value={o.status}
+                            onChange={(e) => handleOrderStatusChange(o._id, e.target.value)}
+                          >
+                            <option value={o.status}>-- Action --</option>
+                            <option value="Return Approved">✅ Approve Return Request</option>
+                            <option value="Replacement Shipped">🚚 Ship Replacement Unit</option>
+                            <option value="Refund Processed">💵 Refund Money to Customer</option>
+                            <option value="Delivered">❌ Reject Return Request</option>
+                          </select>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* TAB 6: REVIEWS */}
+        {activeTab === 'reviews' && (
+          <div>
+            <div className="d-flex justify-content-between align-items-center mb-4">
+              <h3 className="fw-bold m-0">⭐ Customer Ratings & Feedback Reviews</h3>
+              <button className="btn btn-outline-primary btn-sm fw-bold" onClick={fetchData}>
+                <i className="bi bi-arrow-clockwise me-1"></i> Sync Reviews
+              </button>
+            </div>
+
+            <div className="card border-0 shadow-sm p-4 bg-white">
+              <table className="table table-bordered table-hover align-middle">
+                <thead className="table-dark">
+                  <tr>
+                    <th>Order ID</th>
+                    <th>Customer Name</th>
+                    <th>Rating</th>
+                    <th>Review Comment</th>
+                    <th>Date</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {reviews.length === 0 ? (
+                    <tr>
+                      <td colSpan="5" className="text-center py-5 text-muted">
+                        <i className="bi bi-chat-square-quote fs-2 d-block mb-2 text-secondary"></i>
+                        <h5>No customer reviews submitted yet.</h5>
+                      </td>
+                    </tr>
+                  ) : (
+                    reviews.map((rev, idx) => (
+                      <tr key={idx}>
+                        <td className="fw-bold text-primary">#{rev.orderId}</td>
+                        <td className="fw-bold">{rev.customerName} <small className="text-muted d-block">{rev.customerEmail}</small></td>
+                        <td>
+                          <span className="badge bg-warning text-dark fw-bold fs-6">
+                            {'★'.repeat(rev.rating || 5)} {rev.rating}/5
+                          </span>
+                        </td>
+                        <td className="fw-semibold text-dark">{rev.comment || 'No comment provided'}</td>
+                        <td className="small text-muted">{rev.date || 'Recent'}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* TAB 7: COUPONS */}
+        {activeTab === 'coupons' && ['SuperAdmin', 'admin'].includes(user.role) && (
+          <div>
+            <h3 className="fw-bold mb-4">Marketing & Discount Coupon Engine</h3>
+            <div className="row g-4">
+              <div className="col-md-5">
+                <div className="card border-0 shadow-sm p-4 bg-white">
+                  <h5 className="fw-bold mb-3">Create Category Promo Code</h5>
+                  <form onSubmit={handleAddCoupon}>
+                    <div className="mb-3">
+                      <label className="form-label fw-bold">Coupon Code</label>
+                      <input type="text" className="form-control" required placeholder="e.g. PAPAJIONTOP, TECH10" value={newCouponCode} onChange={(e) => setNewCouponCode(e.target.value)} />
+                    </div>
+
+                    <div className="mb-3">
+                      <label className="form-label fw-bold">Applicable Category</label>
+                      <select 
+                        className="form-select fw-bold text-primary"
+                        value={newCouponCategory}
+                        onChange={(e) => setNewCouponCategory(e.target.value)}
+                      >
+                        <option value="All">🌟 All Categories (Global Discount)</option>
+                        {categories.map((cat, idx) => (
+                          <option key={idx} value={cat}>📦 {cat} Only</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="mb-3">
+                      <label className="form-label fw-bold">Discount Percentage (%)</label>
+                      <input type="number" className="form-control" required placeholder="e.g. 20" value={newCouponDiscount} onChange={(e) => setNewCouponDiscount(e.target.value)} />
+                    </div>
+
+                    <div className="mb-3">
+                      <label className="form-label fw-bold">Total Redemption / Customer Limit</label>
+                      <input 
+                        type="number" 
+                        className="form-control" 
+                        required 
+                        placeholder="e.g. 10 (Max 10 customers can use)" 
+                        value={newCouponMaxUsage} 
+                        onChange={(e) => setNewCouponMaxUsage(e.target.value)} 
+                      />
+                    </div>
+
+                    <button type="submit" className="btn btn-success w-100 fw-bold py-2">Publish Coupon Live</button>
+                  </form>
+                </div>
+              </div>
+
+              <div className="col-md-7">
+                <div className="card border-0 shadow-sm p-4 bg-white">
+                  <h5 className="fw-bold mb-3">Active Promotional Coupons ({coupons.length})</h5>
+                  <table className="table table-bordered table-hover align-middle">
+                    <thead className="table-dark">
+                      <tr>
+                        <th>Code</th>
+                        <th>Category</th>
+                        <th>Discount</th>
+                        <th>Redemption Usage</th>
+                        <th>Status</th>
+                        <th>Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {coupons.map((c, idx) => (
+                        <tr key={c._id || c.id || idx}>
+                          <td className="fw-bold text-primary">{c.code}</td>
+                          <td>
+                            <span className={`badge ${c.category === 'All' ? 'bg-primary' : 'bg-info text-dark'} fw-bold`}>
+                              {c.category || 'All'}
+                            </span>
+                          </td>
+                          <td className="fw-bold text-success">{c.discount}% OFF</td>
+                          <td>
+                            <span className={`badge ${(c.usedCount || 0) >= (c.maxUsage || 100) ? 'bg-danger' : 'bg-secondary'} px-2 py-1`}>
+                              {c.usedCount || 0} / {c.maxUsage || 100} Used
+                            </span>
+                          </td>
+                          <td>
+                            {(c.usedCount || 0) >= (c.maxUsage || 100) ? (
+                              <span className="badge bg-danger">Exhausted</span>
+                            ) : (
+                              <span className="badge bg-success">{c.status || 'Active'}</span>
+                            )}
+                          </td>
+                          <td>
+                            <button className="btn btn-sm btn-outline-danger fw-bold" onClick={() => handleDeleteCoupon(c._id || c.id || c.code)}>
+                              Delete
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+      </div>
+    </div>
+  );
+}
+
+export default App;
