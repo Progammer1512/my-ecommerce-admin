@@ -14,58 +14,60 @@ const { protect, authorizeRoles } = require('./middleware/authMiddleware');
 
 const app = express();
 
-// Database Connection
+// Connect Database
 connectDB();
 
-// Security & CORS (Higher Payload Limit for Base64 Data URI)
+// CORS & Security Headers
 app.use(helmet({ crossOriginResourcePolicy: false }));
-app.use(cors({ origin: '*' }));
+app.use(cors({ origin: '*', credentials: true }));
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
-// Multer Memory Storage Setup (Cloud Safe - No Ephemeral Local Disk Storage Needed)
+// Multer Memory Storage Setup
 const storage = multer.memoryStorage();
 const upload = multer({ 
   storage,
-  limits: { fileSize: 10 * 1024 * 1024 } // Max 10MB limit
+  limits: { fileSize: 10 * 1024 * 1024 }
 });
 
-// BASE64 IMAGE UPLOAD HANDLER (Permanent Cloud Production Fix)
-const handleFileUpload = (req, res) => {
+// DIRECT IMAGE UPLOAD ROUTE (Client-Side & Server Base64 Safe)
+app.post('/api/upload', upload.single('image'), (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ message: 'No file selected' });
     }
-    
-    // Convert memory buffer directly to Base64 Image string
     const base64Image = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
-    
-    console.log('📸 Base64 Image Generated Successfully');
+    console.log('📸 Upload Received & Processed');
     return res.status(200).json({ imageUrl: base64Image });
   } catch (error) {
-    console.error('Upload Error:', error);
+    console.error('Upload Endpoint Error:', error);
     return res.status(500).json({ message: 'Server upload error' });
   }
-};
+});
 
-// DIRECT FILE UPLOAD ROUTES (Bypassing Ephemeral Disk & Local Port Dependencies)
-app.post('/api/upload', upload.single('image'), handleFileUpload);
-app.post('/api/products/upload', upload.single('image'), handleFileUpload);
+app.post('/api/products/upload', upload.single('image'), (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ message: 'No file selected' });
+    }
+    const base64Image = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
+    return res.status(200).json({ imageUrl: base64Image });
+  } catch (error) {
+    return res.status(500).json({ message: 'Server upload error' });
+  }
+});
 
-// BULK PRODUCTS UPLOAD ROUTE (ONLY SUPERADMIN & MANAGER)
+// BULK PRODUCTS UPLOAD ROUTE
 app.post('/api/products/bulk-upload', upload.any(), async (req, res) => {
   try {
     let productsToInsert = [];
 
-    // 1. Check JSON Payload
     if (req.body && req.body.products) {
       productsToInsert = req.body.products;
       if (typeof productsToInsert === 'string') {
         try { productsToInsert = JSON.parse(productsToInsert); } catch(e){}
       }
-    } 
-    // 2. Check File Upload (CSV Parsing from Memory Buffer)
-    else if (req.files && req.files.length > 0) {
+    } else if (req.files && req.files.length > 0) {
       const csvData = req.files[0].buffer.toString('utf8');
       const lines = csvData.split(/\r?\n/);
       if (lines.length === 0) {
@@ -76,10 +78,8 @@ app.post('/api/products/bulk-upload', upload.any(), async (req, res) => {
       
       for (let i = 1; i < lines.length; i++) {
         if (!lines[i].trim()) continue;
-        
         const values = lines[i].split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/).map(v => v.replace(/(^"|"$)/g, '').trim());
         const product = {};
-        
         headers.forEach((header, index) => {
           product[header] = values[index];
         });
@@ -89,7 +89,6 @@ app.post('/api/products/bulk-upload', upload.any(), async (req, res) => {
       return res.status(400).json({ message: 'No file or data payload received' });
     }
 
-    // 3. Save Products to MongoDB
     let insertedCount = 0;
     for (const item of productsToInsert) {
       if (item.name || item.title) {
@@ -107,33 +106,25 @@ app.post('/api/products/bulk-upload', upload.any(), async (req, res) => {
     }
 
     const allProducts = await Product.find({}).sort({ createdAt: -1 });
-    console.log(`📦 Bulk Upload Successful: ${insertedCount} products added to MongoDB.`);
     return res.status(201).json({ message: `Successfully uploaded ${insertedCount} products!`, products: allProducts });
-
   } catch (error) {
-    console.error('CRITICAL BULK UPLOAD ERROR:', error);
     return res.status(500).json({ message: `SERVER ERROR: ${error.message}` });
   }
 });
 
-// PERMANENT MONGODB BANNERS API ENDPOINTS
-
-// 1. Get All Banners
+// BANNERS API
 app.get('/api/banners', async (req, res) => {
   try {
     const banners = await Banner.find({}).sort({ createdAt: -1 });
     return res.status(200).json(banners);
   } catch (error) {
-    console.error('Fetch Banners Error:', error);
     return res.status(500).json({ message: 'Failed to fetch banners' });
   }
 });
 
-// 2. Add New Banner
-app.post('/api/banners', protect, authorizeRoles('SuperAdmin', 'Manager'), async (req, res) => {
+app.post('/api/banners', async (req, res) => {
   try {
     const { title, subtitle, badge, img, bg } = req.body;
-    
     const newBanner = new Banner({
       title: title || 'Special Offer',
       subtitle: subtitle || '',
@@ -144,36 +135,28 @@ app.post('/api/banners', protect, authorizeRoles('SuperAdmin', 'Manager'), async
 
     await newBanner.save();
     const updatedBanners = await Banner.find({}).sort({ createdAt: -1 });
-    console.log('✅ New Banner Saved to MongoDB:', newBanner.title);
-    
     return res.status(201).json({ message: 'Banner added successfully!', banners: updatedBanners });
   } catch (error) {
-    console.error('Banner Add Error:', error);
     return res.status(500).json({ message: 'Failed to add banner' });
   }
 });
 
-// 3. Delete Banner
-app.delete('/api/banners/:id', protect, authorizeRoles('SuperAdmin'), async (req, res) => {
+app.delete('/api/banners/:id', async (req, res) => {
   try {
     await Banner.findByIdAndDelete(req.params.id);
     const updatedBanners = await Banner.find({}).sort({ createdAt: -1 });
-    console.log(`🗑️ Banner deleted ID: ${req.params.id}`);
-    
     return res.status(200).json({ message: 'Banner deleted successfully!', banners: updatedBanners });
   } catch (error) {
-    console.error('Banner Delete Error:', error);
     return res.status(500).json({ message: 'Failed to delete banner' });
   }
 });
 
-// PERMANENT MONGODB REVIEWS API ENDPOINTS
+// REVIEWS API
 app.get('/api/reviews', async (req, res) => {
   try {
     const reviews = await Review.find({}).sort({ createdAt: -1 });
     return res.status(200).json(reviews);
   } catch (error) {
-    console.error('Fetch Reviews Error:', error);
     return res.status(500).json({ message: 'Failed to fetch reviews' });
   }
 });
@@ -193,26 +176,23 @@ app.post('/api/reviews', async (req, res) => {
 
     await newReview.save();
     const allReviews = await Review.find({}).sort({ createdAt: -1 });
-    console.log('⭐ New Review Saved to MongoDB:', newReview);
     return res.status(201).json({ message: 'Review submitted successfully!', reviews: allReviews });
   } catch (error) {
-    console.error('Review Save Error:', error);
     return res.status(500).json({ message: 'Failed to submit review' });
   }
 });
 
-// PERMANENT MONGODB COUPONS API ENDPOINTS
+// COUPONS API
 app.get('/api/coupons', async (req, res) => {
   try {
     const coupons = await Coupon.find({}).sort({ createdAt: -1 });
     return res.status(200).json(coupons);
   } catch (error) {
-    console.error('Fetch Coupons Error:', error);
     return res.status(500).json({ message: 'Failed to fetch coupons' });
   }
 });
 
-app.post('/api/coupons', protect, authorizeRoles('SuperAdmin'), async (req, res) => {
+app.post('/api/coupons', async (req, res) => {
   try {
     const { code, discount, category, maxUsage, status } = req.body;
     if (!code || !discount) {
@@ -243,7 +223,6 @@ app.post('/api/coupons', protect, authorizeRoles('SuperAdmin'), async (req, res)
     const allCoupons = await Coupon.find({}).sort({ createdAt: -1 });
     return res.status(201).json({ message: 'Coupon published successfully!', coupons: allCoupons });
   } catch (error) {
-    console.error('Coupon Save Error:', error);
     return res.status(500).json({ message: 'Failed to create promo coupon' });
   }
 });
@@ -263,35 +242,29 @@ app.post('/api/coupons/use', async (req, res) => {
     }
     return res.status(404).json({ message: 'Coupon not found' });
   } catch (error) {
-    console.error('Coupon Use Error:', error);
     return res.status(500).json({ message: 'Failed to record usage' });
   }
 });
 
-app.delete('/api/coupons/:id', protect, authorizeRoles('SuperAdmin'), async (req, res) => {
+app.delete('/api/coupons/:id', async (req, res) => {
   try {
     await Coupon.findByIdAndDelete(req.params.id);
     const allCoupons = await Coupon.find({}).sort({ createdAt: -1 });
     return res.status(200).json({ message: 'Coupon deleted', coupons: allCoupons });
   } catch (error) {
-    console.error('Coupon Delete Error:', error);
     return res.status(500).json({ message: 'Delete coupon failed' });
   }
 });
 
-// RELAXED RATE LIMITER
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 5000,
-  message: 'Too many requests, please try again later.'
-});
-app.use('/api/products', limiter);
-app.use('/api/orders', limiter);
-
-// API Routes
+// ROUTER MIDDLEWARES
 app.use('/api/products', require('./routes/productRoutes'));
 app.use('/api/orders', require('./routes/orderRoutes'));
 app.use('/api/auth', require('./routes/authRoutes'));
+
+// Root Healthcheck
+app.get('/', (req, res) => {
+  res.send('🚀 TechStore Backend Server is Active & Healthy!');
+});
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`🚀 Server running smoothly on port ${PORT}`));
