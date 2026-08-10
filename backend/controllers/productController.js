@@ -16,13 +16,17 @@ exports.getProducts = async (req, res) => {
 exports.createProduct = async (req, res) => {
   try {
     const { name, price, category, description, image, stock } = req.body;
+    
+    // 🔧 FIXED: Exact stock check taaki 0 ya chote numbers (jaise 2) override na hon
+    const finalStock = stock !== undefined && stock !== '' ? Number(stock) : 10;
+
     const product = new Product({
       name,
       price,
       category,
       description,
       image,
-      stock: stock || 10
+      stock: finalStock
     });
     const savedProduct = await product.save();
     res.status(201).json(savedProduct);
@@ -43,7 +47,7 @@ exports.updateProduct = async (req, res) => {
       product.category = category || product.category;
       product.description = description || product.description;
       product.image = image || product.image;
-      product.stock = stock !== undefined ? stock : product.stock;
+      product.stock = stock !== undefined && stock !== '' ? Number(stock) : product.stock;
 
       const updatedProduct = await product.save();
       res.json(updatedProduct);
@@ -77,13 +81,14 @@ exports.bulkUploadProducts = async (req, res) => {
   fs.createReadStream(filePath)
     .pipe(csv())
     .on('data', (row) => {
+      const parsedStock = row.stock !== undefined && row.stock !== '' ? Number(row.stock) : 10;
       products.push({
         name: row.name,
         price: Number(row.price),
         category: row.category || 'General',
         description: row.description || '',
         image: row.image || 'https://via.placeholder.com/150',
-        stock: Number(row.stock) || 10
+        stock: parsedStock
       });
     })
     .on('end', async () => {
