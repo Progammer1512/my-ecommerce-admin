@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
+import Papa from 'papaparse';
 import 'bootstrap/dist/css/bootstrap.min.css';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
 import { hasTabAccess } from './roleConfig';
@@ -24,7 +25,7 @@ const parseCleanStock = (val) => {
   return isNaN(num) ? 0 : num;
 };
 
-// HELPER: REGEX CSV ROW PARSER (Handles quotes and embedded commas correctly)
+// HELPER: REGEX CSV ROW PARSER
 const parseCsvRow = (text) => {
   const result = [];
   let cell = '';
@@ -398,60 +399,63 @@ function App() {
     setShowCustomCategory(false);
   };
 
-  // 🟢 ACCURATE CSV PARSER & DIRECT MONGO DB STOCK SYNC
-  const handleCsvUpload = async (e) => {
+  // 🟢 PAPAPARSE DRIVEN CSV UPLOAD HANDLER (Clean BOM, quotes and \\r)
+  const handleCsvUpload = (e) => {
     e.preventDefault();
     if (!csvFile) return alert('Please select a CSV file first!');
 
-    const reader = new FileReader();
-    reader.onload = async (evt) => {
-      const text = evt.target.result;
-      const lines = text.split(/\r\n|\n/).filter(line => line.trim() !== '');
-      if (lines.length <= 1) return alert('CSV file is empty or missing data rows!');
+    Papa.parse(csvFile, {
+      header: true,
+      skipEmptyLines: true,
+      transformHeader: (h) => h.trim().toLowerCase().replace(/^\ufeff/, ''),
+      complete: async (results) => {
+        const rows = results.data;
+        if (!rows || rows.length === 0) {
+          return alert('CSV file is empty or missing data rows!');
+        }
 
-      const headers = parseCsvRow(lines[0]).map(h => h.trim().toLowerCase());
-      const nameIdx = headers.indexOf('name');
-      const priceIdx = headers.indexOf('price');
-      const categoryIdx = headers.indexOf('category');
-      const descriptionIdx = headers.indexOf('description');
-      const imageIdx = headers.indexOf('image');
-      const stockIdx = headers.indexOf('stock');
+        const authConfig = getAuthHeader();
 
-      if (nameIdx === -1 || priceIdx === -1) {
-        return alert('CSV Headers Required: name, price, category, description, image, stock');
+        try {
+          const uploadPromises = rows.map((row) => {
+            // Normalize keys to avoid hidden spaces
+            const cleanRow = {};
+            Object.keys(row).forEach((k) => {
+              cleanRow[k.trim().toLowerCase()] = row[k];
+            });
+
+            const rawName = cleanRow.name || cleanRow.title || 'Imported Item';
+            const rawPrice = parseCleanStock(cleanRow.price);
+            const rawCategory = cleanRow.category || 'General';
+            const rawDesc = cleanRow.description || '';
+            const rawImage = cleanRow.image || 'https://via.placeholder.com/150';
+            const rawStock = parseCleanStock(cleanRow.stock || cleanRow.quantity || cleanRow.qty);
+
+            const productPayload = {
+              name: String(rawName).trim(),
+              price: rawPrice,
+              category: String(rawCategory).trim(),
+              description: String(rawDesc).trim(),
+              image: String(rawImage).trim(),
+              stock: rawStock // 🟢 Preserves 25, 15, 30 exact CSV quantity
+            };
+
+            return axios.post(`${BASE_URL}/api/products`, productPayload, authConfig);
+          });
+
+          await Promise.all(uploadPromises);
+          alert(`🎉 Successfully uploaded ${rows.length} products to MongoDB with exact Stock Quantities!`);
+          setCsvFile(null);
+          fetchData();
+        } catch (error) {
+          console.error('CSV Import Error:', error);
+          alert('Upload Error: ' + (error.response?.data?.message || error.message));
+        }
+      },
+      error: (err) => {
+        alert('Error parsing CSV file: ' + err.message);
       }
-
-      const rows = lines.slice(1);
-      const authConfig = getAuthHeader();
-
-      try {
-        const uploadPromises = rows.map((rowText) => {
-          const cols = parseCsvRow(rowText);
-          const rawStockStr = stockIdx !== -1 && cols[stockIdx] !== undefined ? cols[stockIdx] : '0';
-          const parsedStock = parseCleanStock(rawStockStr);
-
-          const productPayload = {
-            name: cols[nameIdx] || 'Imported Item',
-            price: Number(cols[priceIdx]) || 0,
-            category: categoryIdx !== -1 && cols[categoryIdx] ? cols[categoryIdx] : 'General',
-            description: descriptionIdx !== -1 && cols[descriptionIdx] ? cols[descriptionIdx] : 'Imported store item',
-            image: imageIdx !== -1 && cols[imageIdx] ? cols[imageIdx] : 'https://via.placeholder.com/150',
-            stock: parsedStock // 🟢 Preserves 25, 15, 30 exact CSV quantity
-          };
-
-          return axios.post(`${BASE_URL}/api/products`, productPayload, authConfig);
-        });
-
-        await Promise.all(uploadPromises);
-        alert(`🎉 Successfully uploaded ${rows.length} products to MongoDB with exact Stock Quantities!`);
-        setCsvFile(null);
-        fetchData();
-      } catch (error) {
-        console.error('CSV Import Error:', error);
-        alert('Upload Error: ' + (error.response?.data?.message || error.message));
-      }
-    };
-    reader.readAsText(csvFile);
+    });
   };
 
   const handleBulkDeleteProducts = async (deleteAll = false) => {
@@ -502,7 +506,7 @@ function App() {
     
     const productData = { 
       name, 
-      price: Number(price), 
+      price: parseCleanStock(price), 
       category, 
       description, 
       image, 
