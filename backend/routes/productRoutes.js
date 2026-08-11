@@ -12,11 +12,11 @@ const {
   bulkDeleteProducts
 } = require('../controllers/productController');
 
-// 🟢 BULK ROUTES (MUST BE PLACED BEFORE Dynamic /:id Route)
+// 🟢 FIX: Dynamic /:id route se pehle bulk endpoints rakhein
 router.post('/bulk-upload', upload.single('file'), bulkUploadProducts);
 router.post('/bulk-delete', bulkDeleteProducts);
 
-// STANDARD PRODUCT ROUTES
+// Standard Routes
 router.get('/', getProducts);
 router.post('/', createProduct);
 router.put('/:id', updateProduct);

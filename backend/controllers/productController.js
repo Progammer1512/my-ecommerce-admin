@@ -12,7 +12,7 @@ exports.getProducts = async (req, res) => {
   }
 };
 
-// Create Single Product
+// Create Product
 exports.createProduct = async (req, res) => {
   try {
     const { name, price, category, description, image, stock } = req.body;
@@ -69,16 +69,16 @@ exports.deleteProduct = async (req, res) => {
   }
 };
 
-// 🔴 NEW: BULK DELETE ALL OR SELECTED PRODUCTS
+// 🔴 BULK DELETE PRODUCTS (Selected or ALL)
 exports.bulkDeleteProducts = async (req, res) => {
   try {
-    const { ids } = req.body; // Array of product IDs, or empty/null to delete ALL
+    const { ids } = req.body;
     if (ids && Array.isArray(ids) && ids.length > 0) {
       await Product.deleteMany({ _id: { $in: ids } });
       res.json({ message: `🔥 Successfully deleted ${ids.length} selected products!` });
     } else {
       await Product.deleteMany({});
-      res.json({ message: '🔥 Successfully wiped ALL products from Database!' });
+      res.json({ message: '🔥 Successfully deleted ALL products from Database!' });
     }
   } catch (error) {
     res.status(500).json({ message: 'Bulk delete failed: ' + error.message });
