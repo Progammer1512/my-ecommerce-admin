@@ -16,6 +16,14 @@ const getCleanImageUrl = (url) => {
   return url;
 };
 
+// HELPER: CLEAN STOCK NUMERIC CONVERTER
+const parseCleanStock = (val) => {
+  if (val === undefined || val === null || val === '') return 0;
+  const cleanStr = String(val).replace(/[^0-9]/g, '');
+  const num = parseInt(cleanStr, 10);
+  return isNaN(num) ? 0 : num;
+};
+
 // HELPER: REGEX CSV ROW PARSER (Handles quotes and embedded commas correctly)
 const parseCsvRow = (text) => {
   const result = [];
@@ -419,10 +427,8 @@ function App() {
       try {
         const uploadPromises = rows.map((rowText) => {
           const cols = parseCsvRow(rowText);
-          
           const rawStockStr = stockIdx !== -1 && cols[stockIdx] !== undefined ? cols[stockIdx] : '0';
-          const cleanStockNum = parseInt(rawStockStr.replace(/[^0-9]/g, ''), 10);
-          const parsedStock = isNaN(cleanStockNum) ? 0 : cleanStockNum;
+          const parsedStock = parseCleanStock(rawStockStr);
 
           const productPayload = {
             name: cols[nameIdx] || 'Imported Item',
@@ -492,8 +498,7 @@ function App() {
   // 🟢 DIRECT PRODUCT CREATE & EDIT HANDLER (Dynamic Quantity Sync to MongoDB)
   const handleProductSubmit = async (e) => {
     e.preventDefault();
-    const cleanStockNum = parseInt(String(stock).replace(/[^0-9]/g, ''), 10);
-    const parsedStock = isNaN(cleanStockNum) ? 0 : cleanStockNum;
+    const parsedStock = parseCleanStock(stock);
     
     const productData = { 
       name, 
