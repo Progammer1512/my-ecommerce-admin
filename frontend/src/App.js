@@ -34,6 +34,7 @@ function App() {
 
   const [activeTab, setActiveTab] = useState('dashboard');
   const [products, setProducts] = useState([]);
+  const [selectedProductIds, setSelectedProductIds] = useState([]); // 🔴 Checkbox Selection State
   const [orders, setOrders] = useState([]);
   const [banners, setBanners] = useState([]);
   const [reviews, setReviews] = useState([]);
@@ -391,7 +392,41 @@ function App() {
     }
   };
 
-  // 🟢 STRICT SUBMIT HANDLER: Converts input value directly to Number without failing to 0
+  // 🔴 BULK DELETE FUNCTION (Deletes Selected OR All products)
+  const handleBulkDeleteProducts = async (deleteAll = false) => {
+    const confirmMessage = deleteAll 
+      ? '⚠️ ARE YOU SURE? This will PERMANENTLY DELETE ALL products from Database!' 
+      : `Delete ${selectedProductIds.length} selected products permanently?`;
+
+    if (!window.confirm(confirmMessage)) return;
+
+    try {
+      const payload = deleteAll ? {} : { ids: selectedProductIds };
+      const res = await axios.post(`${BASE_URL}/api/products/bulk-delete`, payload, getAuthHeader());
+      alert(res.data.message);
+      setSelectedProductIds([]);
+      fetchData();
+    } catch (error) {
+      alert('Bulk Delete Failed: ' + (error.response?.data?.message || error.message));
+    }
+  };
+
+  const handleSelectAllProducts = (e) => {
+    if (e.target.checked) {
+      setSelectedProductIds(products.map(p => p._id || p.id));
+    } else {
+      setSelectedProductIds([]);
+    }
+  };
+
+  const handleToggleSelectProduct = (id) => {
+    if (selectedProductIds.includes(id)) {
+      setSelectedProductIds(selectedProductIds.filter(item => item !== id));
+    } else {
+      setSelectedProductIds([...selectedProductIds, id]);
+    }
+  };
+
   const handleProductSubmit = async (e) => {
     e.preventDefault();
     const numStock = Number(stock);
@@ -405,28 +440,22 @@ function App() {
       image, 
       stock: parsedStock 
     };
-    
-    console.log("📤 SUBMITTING PRODUCT DATA:", productData);
 
     try {
       if (editingId) {
-        const res = await axios.put(`${BASE_URL}/api/products/${editingId}`, productData, getAuthHeader());
-        console.log("✅ UPDATE RESPONSE:", res.data);
+        await axios.put(`${BASE_URL}/api/products/${editingId}`, productData, getAuthHeader());
         alert('✅ Product Updated in Database!');
       } else {
-        const res = await axios.post(`${BASE_URL}/api/products`, productData, getAuthHeader());
-        console.log("🎉 CREATE RESPONSE:", res.data);
+        await axios.post(`${BASE_URL}/api/products`, productData, getAuthHeader());
         alert('🎉 New Product Created in Database!');
       }
       resetProductForm();
       fetchData();
     } catch (error) {
-      console.error('❌ SUBMIT ERROR:', error.response || error);
       alert('Failed: ' + (error.response?.data?.message || error.message));
     }
   };
 
-  // 🟢 EDIT HANDLER: Loads MongoDB stock value directly to state
   const handleEditProduct = (p) => {
     const targetId = p._id || p.id;
     setEditingId(targetId);
@@ -868,7 +897,6 @@ function App() {
                       </div>
                     )}
 
-                    {/* 🟢 FIXED: Stock Quantity Input correctly updating state */}
                     <div className="mb-2">
                       <label className="form-label fw-semibold">Stock Quantity</label>
                       <input 
@@ -913,10 +941,43 @@ function App() {
 
               <div className="col-lg-7">
                 <div className="card border-0 shadow-sm p-4 bg-white">
-                  <h5 className="fw-bold mb-3">Live Inventory Management</h5>
+                  {/* 🔴 BULK DELETE BUTTON ACTION ROW */}
+                  <div className="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+                    <h5 className="fw-bold m-0">Live Inventory Management ({products.length})</h5>
+                    
+                    {userRole === 'SuperAdmin' && (
+                      <div className="d-flex gap-2">
+                        {selectedProductIds.length > 0 && (
+                          <button 
+                            className="btn btn-warning btn-sm fw-bold shadow-sm"
+                            onClick={() => handleBulkDeleteProducts(false)}
+                          >
+                            🗑️ Delete Selected ({selectedProductIds.length})
+                          </button>
+                        )}
+                        <button 
+                          className="btn btn-danger btn-sm fw-bold shadow-sm"
+                          onClick={() => handleBulkDeleteProducts(true)}
+                        >
+                          🔥 Clear ALL Store Products
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
                   <table className="table table-hover align-middle border">
                     <thead className="table-dark">
                       <tr>
+                        {userRole === 'SuperAdmin' && (
+                          <th style={{ width: '40px' }}>
+                            <input 
+                              type="checkbox" 
+                              className="form-check-input"
+                              checked={products.length > 0 && selectedProductIds.length === products.length}
+                              onChange={handleSelectAllProducts}
+                            />
+                          </th>
+                        )}
                         <th>Item</th>
                         <th>Category</th>
                         <th>Price</th>
@@ -925,33 +986,53 @@ function App() {
                       </tr>
                     </thead>
                     <tbody>
-                      {products.map((p) => {
-                        const targetId = p._id || p.id;
-                        const currentStock = p.stock !== undefined && p.stock !== null ? Number(p.stock) : 0;
-                        return (
-                        <tr key={targetId}>
-                          <td className="fw-bold small">{p.name}</td>
-                          <td><span className="badge bg-secondary">{p.category}</span></td>
-                          <td className="text-success fw-bold">₹{p.price}</td>
-                          <td>
-                            {currentStock <= 0 ? (
-                              <span className="badge bg-danger">Low Stock (0)</span>
-                            ) : currentStock < 5 ? (
-                              <span className="badge bg-warning text-dark">Low Stock ({currentStock})</span>
-                            ) : (
-                              <span className="badge bg-success">In Stock ({currentStock})</span>
-                            )}
-                          </td>
-                          <td>
-                            <div className="btn-group btn-group-sm">
-                              <button className="btn btn-outline-primary" onClick={() => handleEditProduct(p)}>Edit</button>
-                              {userRole === 'SuperAdmin' && (
-                                <button className="btn btn-outline-danger" onClick={() => handleDeleteProduct(targetId)}>Delete</button>
-                              )}
-                            </div>
+                      {products.length === 0 ? (
+                        <tr>
+                          <td colSpan={userRole === 'SuperAdmin' ? 6 : 5} className="text-center py-4 text-muted">
+                            No products found in database. Add new items or bulk upload CSV.
                           </td>
                         </tr>
-                      )})}
+                      ) : (
+                        products.map((p) => {
+                          const targetId = p._id || p.id;
+                          const currentStock = p.stock !== undefined && p.stock !== null ? Number(p.stock) : 0;
+                          const isSelected = selectedProductIds.includes(targetId);
+
+                          return (
+                          <tr key={targetId} className={isSelected ? 'table-warning' : ''}>
+                            {userRole === 'SuperAdmin' && (
+                              <td>
+                                <input 
+                                  type="checkbox" 
+                                  className="form-check-input"
+                                  checked={isSelected}
+                                  onChange={() => handleToggleSelectProduct(targetId)}
+                                />
+                              </td>
+                            )}
+                            <td className="fw-bold small">{p.name}</td>
+                            <td><span className="badge bg-secondary">{p.category}</span></td>
+                            <td className="text-success fw-bold">₹{p.price}</td>
+                            <td>
+                              {currentStock <= 0 ? (
+                                <span className="badge bg-danger">Out of Stock (0)</span>
+                              ) : currentStock < 5 ? (
+                                <span className="badge bg-warning text-dark">Low Stock ({currentStock})</span>
+                              ) : (
+                                <span className="badge bg-success">In Stock ({currentStock})</span>
+                              )}
+                            </td>
+                            <td>
+                              <div className="btn-group btn-group-sm">
+                                <button className="btn btn-outline-primary" onClick={() => handleEditProduct(p)}>Edit</button>
+                                {userRole === 'SuperAdmin' && (
+                                  <button className="btn btn-outline-danger" onClick={() => handleDeleteProduct(targetId)}>Delete</button>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        )})
+                      )}
                     </tbody>
                   </table>
                 </div>
