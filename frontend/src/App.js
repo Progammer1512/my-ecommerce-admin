@@ -1128,7 +1128,7 @@ function App() {
           </div>
         )}
 
-        {/* 🟢 ORDERS & SHIPPING TAB: WIDE NON-WRAPPING RESPONSIVE TABLE */}
+        {/* 🟢 ORDERS & SHIPPING TAB: WIDE NON-WRAPPING RESPONSIVE TABLE WITH INLINE MIN-WIDTHS */}
         {activeTab === 'orders' && hasTabAccess(userRole, 'orders') && (
           <div>
             <div className="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
@@ -1171,21 +1171,21 @@ function App() {
               </div>
             </div>
 
-            {/* 🟢 EXPANDED RESPONSIVE CONTAINER WITH NO-WRAP COLUMNS */}
+            {/* 🟢 FIXED EXPANDED TABLE WITH INLINE NO-WRAP & MIN-WIDTHS */}
             <div className="card border-0 shadow-sm p-3 bg-white">
               <div className="table-responsive">
                 <table className="table table-bordered table-hover align-middle m-0">
-                  <thead className="table-dark text-nowrap">
+                  <thead className="table-dark">
                     <tr>
-                      <th style={{ minWidth: '130px' }}>Order ID</th>
-                      <th style={{ minWidth: '180px' }}>Customer Name</th>
-                      <th style={{ minWidth: '120px' }}>Total Price</th>
-                      <th style={{ minWidth: '180px' }}>Payment Method</th>
-                      <th style={{ minWidth: '150px' }}>Current Status</th>
-                      <th style={{ minWidth: '220px' }}>Update Fulfillment Status</th>
+                      <th style={{ minWidth: '160px', whiteSpace: 'nowrap' }}>Order ID</th>
+                      <th style={{ minWidth: '200px', whiteSpace: 'nowrap' }}>Customer Name</th>
+                      <th style={{ minWidth: '130px', whiteSpace: 'nowrap' }}>Total Price</th>
+                      <th style={{ minWidth: '200px', whiteSpace: 'nowrap' }}>Payment Method</th>
+                      <th style={{ minWidth: '160px', whiteSpace: 'nowrap' }}>Current Status</th>
+                      <th style={{ minWidth: '250px', whiteSpace: 'nowrap' }}>Update Fulfillment Status</th>
                     </tr>
                   </thead>
-                  <tbody className="text-nowrap">
+                  <tbody>
                     {filteredOrders.length === 0 ? (
                       <tr>
                         <td colSpan="6" className="text-center py-5 text-muted">
@@ -1205,16 +1205,16 @@ function App() {
 
                         return (
                         <tr key={orderId || idx}>
-                          <td className="fw-bold text-primary">#{orderId ? orderId : 'N/A'}</td>
-                          <td className="fw-bold">
+                          <td className="fw-bold text-primary" style={{ whiteSpace: 'nowrap' }}>#{orderId ? orderId : 'N/A'}</td>
+                          <td className="fw-bold" style={{ whiteSpace: 'nowrap' }}>
                             {o.shippingAddress?.name || 'Customer'}
                             {o.userEmail && <small className="text-muted d-block">{o.userEmail}</small>}
                           </td>
-                          <td className="text-success fw-bold fs-6">₹{o.totalPrice}</td>
-                          <td>
+                          <td className="text-success fw-bold fs-6" style={{ whiteSpace: 'nowrap' }}>₹{o.totalPrice}</td>
+                          <td style={{ whiteSpace: 'nowrap' }}>
                             <span className="badge bg-info text-dark px-2 py-1">{o.paymentMethod || 'COD'}</span>
                           </td>
-                          <td>
+                          <td style={{ whiteSpace: 'nowrap' }}>
                             <span className={`badge px-3 py-2 ${
                               o.status === 'Delivered' ? 'bg-success' : 
                               o.status === 'In Transit' || o.status === 'Shipped' || o.status === 'Out for Delivery' ? 'bg-primary' :
@@ -1225,10 +1225,10 @@ function App() {
                               {o.status || 'Processing'}
                             </span>
                           </td>
-                          <td>
+                          <td style={{ minWidth: '240px', whiteSpace: 'nowrap' }}>
                             <select 
                               className="form-select form-select-sm fw-bold shadow-sm" 
-                              style={{ minWidth: '200px' }}
+                              style={{ width: '100%', minWidth: '220px' }}
                               value={o.status || 'Processing'}
                               onChange={(e) => {
                                 if (!orderId || orderId.startsWith('LOCAL_ID_')) {
@@ -1274,12 +1274,12 @@ function App() {
                 <table className="table table-bordered table-hover align-middle m-0">
                   <thead className="table-dark text-nowrap">
                     <tr>
-                      <th style={{ minWidth: '130px' }}>Order ID</th>
-                      <th style={{ minWidth: '180px' }}>Customer Name</th>
-                      <th style={{ minWidth: '150px' }}>Request Type</th>
+                      <th style={{ minWidth: '160px' }}>Order ID</th>
+                      <th style={{ minWidth: '200px' }}>Customer Name</th>
+                      <th style={{ minWidth: '160px' }}>Request Type</th>
                       <th style={{ minWidth: '220px' }}>Reason & Details</th>
-                      <th style={{ minWidth: '150px' }}>Current Status</th>
-                      <th style={{ minWidth: '220px' }}>Process Request Action</th>
+                      <th style={{ minWidth: '160px' }}>Current Status</th>
+                      <th style={{ minWidth: '250px' }}>Process Request Action</th>
                     </tr>
                   </thead>
                   <tbody className="text-nowrap">
@@ -1317,7 +1317,7 @@ function App() {
                           <td>
                             <select 
                               className="form-select form-select-sm fw-bold border-danger" 
-                              style={{ minWidth: '200px' }}
+                              style={{ width: '100%', minWidth: '220px' }}
                               value={o.status}
                               onChange={(e) => {
                                 if (!orderId || orderId.startsWith('LOCAL_ID_')) {
@@ -1358,11 +1358,11 @@ function App() {
                 <table className="table table-bordered table-hover align-middle m-0">
                   <thead className="table-dark text-nowrap">
                     <tr>
-                      <th style={{ minWidth: '130px' }}>Order ID</th>
-                      <th style={{ minWidth: '180px' }}>Customer Name</th>
-                      <th style={{ minWidth: '120px' }}>Rating</th>
+                      <th style={{ minWidth: '160px' }}>Order ID</th>
+                      <th style={{ minWidth: '200px' }}>Customer Name</th>
+                      <th style={{ minWidth: '130px' }}>Rating</th>
                       <th style={{ minWidth: '250px' }}>Review Comment</th>
-                      <th style={{ minWidth: '120px' }}>Date</th>
+                      <th style={{ minWidth: '130px' }}>Date</th>
                     </tr>
                   </thead>
                   <tbody className="text-nowrap">
