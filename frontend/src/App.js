@@ -54,7 +54,7 @@ function App() {
   const [category, setCategory] = useState('Electronics');
   const [description, setDescription] = useState('');
   const [image, setImage] = useState('');
-  const [stock, setStock] = useState(10);
+  const [stock, setStock] = useState(0); // 🔧 Defaulted to 0 instead of hardcoded 10
 
   const [bannerTitle, setBannerTitle] = useState('');
   const [bannerSubtitle, setBannerSubtitle] = useState('');
@@ -391,9 +391,12 @@ function App() {
     }
   };
 
+  // 🔧 FIXED SUBMIT HANDLER: Strictly sends user stock as Number
   const handleProductSubmit = async (e) => {
     e.preventDefault();
-    const productData = { name, price: Number(price), category, description, image, stock: Number(stock) };
+    const parsedStock = stock === '' || stock === null || isNaN(Number(stock)) ? 0 : Number(stock);
+    const productData = { name, price: Number(price), category, description, image, stock: parsedStock };
+    
     console.log("📤 SUBMITTING PRODUCT DATA:", productData);
 
     try {
@@ -414,6 +417,7 @@ function App() {
     }
   };
 
+  // 🔧 FIXED EDIT HANDLER: Binds exact stock number to state
   const handleEditProduct = (p) => {
     const targetId = p._id || p.id;
     setEditingId(targetId);
@@ -422,7 +426,7 @@ function App() {
     setCategory(p.category);
     setDescription(p.description);
     setImage(getCleanImageUrl(p.image));
-    setStock(p.stock !== undefined ? p.stock : 10);
+    setStock(p.stock !== undefined && p.stock !== null ? Number(p.stock) : 0);
   };
 
   const handleDeleteProduct = async (id) => {
@@ -436,6 +440,7 @@ function App() {
     }
   };
 
+  // 🔧 FIXED RESET HANDLER: Resets stock to 0
   const resetProductForm = () => {
     setEditingId(null);
     setName('');
@@ -443,7 +448,7 @@ function App() {
     setCategory('Electronics');
     setDescription('');
     setImage('');
-    setStock(10);
+    setStock(0);
     setShowCustomCategory(false);
   };
 
@@ -913,7 +918,7 @@ function App() {
                     <tbody>
                       {products.map((p) => {
                         const targetId = p._id || p.id;
-                        const currentStock = p.stock !== undefined ? Number(p.stock) : 10;
+                        const currentStock = p.stock !== undefined && p.stock !== null ? Number(p.stock) : 0;
                         return (
                         <tr key={targetId}>
                           <td className="fw-bold small">{p.name}</td>
@@ -1268,7 +1273,7 @@ function App() {
                     </thead>
                     <tbody>
                       {coupons.map((c, idx) => {
-                        const couponId = c._id || c.id || c.code;
+                        const couponId = c._id || c.code;
                         return (
                         <tr key={couponId}>
                           <td className="fw-bold text-primary">{c.code}</td>
