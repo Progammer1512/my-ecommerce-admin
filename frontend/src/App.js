@@ -16,6 +16,27 @@ const getCleanImageUrl = (url) => {
   return url;
 };
 
+// HELPER: REGEX CSV ROW PARSER (Handles quotes and embedded commas correctly)
+const parseCsvRow = (text) => {
+  const result = [];
+  let cell = '';
+  let inQuotes = false;
+  
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i];
+    if (char === '"' || char === "'") {
+      inQuotes = !inQuotes;
+    } else if (char === ',' && !inQuotes) {
+      result.push(cell.trim().replace(/^["']|["']$/g, ''));
+      cell = '';
+    } else {
+      cell += char;
+    }
+  }
+  result.push(cell.trim().replace(/^["']|["']$/g, ''));
+  return result;
+};
+
 function App() {
   const [user, setUser] = useState(null);
   const [loginEmail, setLoginEmail] = useState('');
@@ -29,7 +50,7 @@ function App() {
   const [signupRole, setSignupRole] = useState('InventoryManager');
   const [signupSecretCode, setSignupSecretCode] = useState('');
 
-  // SIDEBAR TOGGLE STATE (DEFAULT FALSE)
+  // SIDEBAR TOGGLE STATE
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -369,7 +390,7 @@ function App() {
     setShowCustomCategory(false);
   };
 
-  // 🟢 CSV PARSER & DIRECT MONGO DB UPLOAD HANDLER (Bypasses missing backend route)
+  // 🟢 ACCURATE CSV PARSER & DIRECT MONGO DB STOCK SYNC
   const handleCsvUpload = async (e) => {
     e.preventDefault();
     if (!csvFile) return alert('Please select a CSV file first!');
@@ -377,10 +398,10 @@ function App() {
     const reader = new FileReader();
     reader.onload = async (evt) => {
       const text = evt.target.result;
-      const lines = text.split('\n').filter(line => line.trim() !== '');
+      const lines = text.split(/\r\n|\n/).filter(line => line.trim() !== '');
       if (lines.length <= 1) return alert('CSV file is empty or missing data rows!');
 
-      const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
+      const headers = parseCsvRow(lines[0]).map(h => h.trim().toLowerCase());
       const nameIdx = headers.indexOf('name');
       const priceIdx = headers.indexOf('price');
       const categoryIdx = headers.indexOf('category');
@@ -397,9 +418,11 @@ function App() {
 
       try {
         const uploadPromises = rows.map((rowText) => {
-          const cols = rowText.split(',').map(c => c.trim().replace(/^"|"$/g, ''));
-          const rowStock = stockIdx !== -1 ? cols[stockIdx] : 0;
-          const parsedStock = (rowStock !== undefined && rowStock !== '' && !isNaN(Number(rowStock))) ? Number(rowStock) : 0;
+          const cols = parseCsvRow(rowText);
+          
+          const rawStockStr = stockIdx !== -1 && cols[stockIdx] !== undefined ? cols[stockIdx] : '0';
+          const cleanStockNum = parseInt(rawStockStr.replace(/[^0-9]/g, ''), 10);
+          const parsedStock = isNaN(cleanStockNum) ? 0 : cleanStockNum;
 
           const productPayload = {
             name: cols[nameIdx] || 'Imported Item',
@@ -407,14 +430,14 @@ function App() {
             category: categoryIdx !== -1 && cols[categoryIdx] ? cols[categoryIdx] : 'General',
             description: descriptionIdx !== -1 && cols[descriptionIdx] ? cols[descriptionIdx] : 'Imported store item',
             image: imageIdx !== -1 && cols[imageIdx] ? cols[imageIdx] : 'https://via.placeholder.com/150',
-            stock: parsedStock
+            stock: parsedStock // 🟢 Preserves 25, 15, 30 exact CSV quantity
           };
 
           return axios.post(`${BASE_URL}/api/products`, productPayload, authConfig);
         });
 
         await Promise.all(uploadPromises);
-        alert(`🎉 Successfully uploaded ${rows.length} products to MongoDB!`);
+        alert(`🎉 Successfully uploaded ${rows.length} products to MongoDB with exact Stock Quantities!`);
         setCsvFile(null);
         fetchData();
       } catch (error) {
@@ -425,7 +448,6 @@ function App() {
     reader.readAsText(csvFile);
   };
 
-  // 🔴 BULK DELETE HANDLER (Parallelized calls using active endpoints)
   const handleBulkDeleteProducts = async (deleteAll = false) => {
     const targets = deleteAll ? products.map(p => p._id || p.id) : selectedProductIds;
     
@@ -467,10 +489,11 @@ function App() {
     }
   };
 
+  // 🟢 DIRECT PRODUCT CREATE & EDIT HANDLER (Dynamic Quantity Sync to MongoDB)
   const handleProductSubmit = async (e) => {
     e.preventDefault();
-    const numStock = Number(stock);
-    const parsedStock = isNaN(numStock) ? 0 : numStock;
+    const cleanStockNum = parseInt(String(stock).replace(/[^0-9]/g, ''), 10);
+    const parsedStock = isNaN(cleanStockNum) ? 0 : cleanStockNum;
     
     const productData = { 
       name, 
@@ -484,10 +507,10 @@ function App() {
     try {
       if (editingId) {
         await axios.put(`${BASE_URL}/api/products/${editingId}`, productData, getAuthHeader());
-        alert('✅ Product Updated in Database!');
+        alert(`✅ Product '${name}' Updated in MongoDB! Stock set to ${parsedStock}`);
       } else {
         await axios.post(`${BASE_URL}/api/products`, productData, getAuthHeader());
-        alert('🎉 New Product Created in Database!');
+        alert(`🎉 New Product Created in MongoDB with Stock ${parsedStock}!`);
       }
       resetProductForm();
       fetchData();
