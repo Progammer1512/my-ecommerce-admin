@@ -34,7 +34,7 @@ function App() {
 
   const [activeTab, setActiveTab] = useState('dashboard');
   const [products, setProducts] = useState([]);
-  const [selectedProductIds, setSelectedProductIds] = useState([]); // 🔴 Checkbox Selection State
+  const [selectedProductIds, setSelectedProductIds] = useState([]);
   const [orders, setOrders] = useState([]);
   const [banners, setBanners] = useState([]);
   const [reviews, setReviews] = useState([]);
@@ -392,22 +392,30 @@ function App() {
     }
   };
 
-  // 🔴 BULK DELETE FUNCTION (Deletes Selected OR All products)
+  // 🟢 FIXED BULK DELETE LOGIC: Uses existing working single-delete API endpoint in parallel
   const handleBulkDeleteProducts = async (deleteAll = false) => {
-    const confirmMessage = deleteAll 
-      ? '⚠️ ARE YOU SURE? This will PERMANENTLY DELETE ALL products from Database!' 
-      : `Delete ${selectedProductIds.length} selected products permanently?`;
+    const targets = deleteAll ? products.map(p => p._id || p.id) : selectedProductIds;
+    
+    if (targets.length === 0) return alert("No products selected to delete!");
 
-    if (!window.confirm(confirmMessage)) return;
+    const confirmMsg = deleteAll 
+      ? `🔥 ARE YOU SURE? This will delete ALL ${targets.length} products from database!`
+      : `Delete ${targets.length} selected products?`;
+
+    if (!window.confirm(confirmMsg)) return;
 
     try {
-      const payload = deleteAll ? {} : { ids: selectedProductIds };
-      const res = await axios.post(`${BASE_URL}/api/products/bulk-delete`, payload, getAuthHeader());
-      alert(res.data.message);
+      const authConfig = getAuthHeader();
+      // Execute all single delete API calls in parallel
+      await Promise.all(
+        targets.map(id => axios.delete(`${BASE_URL}/api/products/${id}`, authConfig))
+      );
+      
+      alert(`🎉 Successfully wiped ${targets.length} products from Database!`);
       setSelectedProductIds([]);
       fetchData();
     } catch (error) {
-      alert('Bulk Delete Failed: ' + (error.response?.data?.message || error.message));
+      alert('Deletion Error: ' + (error.response?.data?.message || error.message));
     }
   };
 
@@ -941,7 +949,6 @@ function App() {
 
               <div className="col-lg-7">
                 <div className="card border-0 shadow-sm p-4 bg-white">
-                  {/* 🔴 BULK DELETE BUTTON ACTION ROW */}
                   <div className="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
                     <h5 className="fw-bold m-0">Live Inventory Management ({products.length})</h5>
                     
@@ -955,12 +962,14 @@ function App() {
                             🗑️ Delete Selected ({selectedProductIds.length})
                           </button>
                         )}
-                        <button 
-                          className="btn btn-danger btn-sm fw-bold shadow-sm"
-                          onClick={() => handleBulkDeleteProducts(true)}
-                        >
-                          🔥 Clear ALL Store Products
-                        </button>
+                        {products.length > 0 && (
+                          <button 
+                            className="btn btn-danger btn-sm fw-bold shadow-sm"
+                            onClick={() => handleBulkDeleteProducts(true)}
+                          >
+                            🔥 Clear ALL Store Products
+                          </button>
+                        )}
                       </div>
                     )}
                   </div>
