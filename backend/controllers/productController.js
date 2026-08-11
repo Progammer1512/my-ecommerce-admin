@@ -78,7 +78,7 @@ exports.bulkDeleteProducts = async (req, res) => {
       res.json({ message: `🔥 Successfully deleted ${ids.length} selected products!` });
     } else {
       await Product.deleteMany({});
-      res.json({ message: '🔥 Successfully deleted ALL products from Database!' });
+      res.json({ message: '🔥 Successfully wiped ALL products from Database!' });
     }
   } catch (error) {
     res.status(500).json({ message: 'Bulk delete failed: ' + error.message });
