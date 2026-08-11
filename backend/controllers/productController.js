@@ -2,7 +2,7 @@ const Product = require('../models/Product');
 const fs = require('fs');
 const csv = require('csv-parser');
 
-// Get All Products
+// Get All Products (Used by both Admin & Customer frontend)
 exports.getProducts = async (req, res) => {
   try {
     const products = await Product.find().sort({ createdAt: -1 });
@@ -17,16 +17,20 @@ exports.createProduct = async (req, res) => {
   try {
     const { name, price, category, description, image, stock } = req.body;
     
-    const finalStock = !isNaN(Number(stock)) ? Number(stock) : 10;
+    // 🔧 STRICT FIX: Fallback to 0 instead of 10 if stock is invalid/empty
+    const finalStock = (stock !== undefined && stock !== '' && !isNaN(Number(stock))) 
+      ? Number(stock) 
+      : 0;
 
     const product = new Product({
       name,
-      price,
+      price: Number(price),
       category,
       description,
       image,
       stock: finalStock
     });
+    
     const savedProduct = await product.save();
     res.status(201).json(savedProduct);
   } catch (error) {
@@ -47,8 +51,8 @@ exports.updateProduct = async (req, res) => {
       product.description = description !== undefined ? description : product.description;
       product.image = image !== undefined ? image : product.image;
       
-      // 🔧 STRICT FIX: Ensure stock updates properly even if it is 0
-      if (stock !== undefined && stock !== '' && !isNaN(Number(stock))) {
+      // 🔧 STRICT FIX: Directly set the exact number entered by user
+      if (stock !== undefined && stock !== null && stock !== '' && !isNaN(Number(stock))) {
         product.stock = Number(stock);
       }
 
@@ -84,7 +88,11 @@ exports.bulkUploadProducts = async (req, res) => {
   fs.createReadStream(filePath)
     .pipe(csv())
     .on('data', (row) => {
-      const parsedStock = !isNaN(Number(row.stock)) ? Number(row.stock) : 10;
+      // 🔧 STRICT FIX: Fallback to 0 if CSV stock column is missing or empty
+      const parsedStock = (row.stock !== undefined && row.stock !== '' && !isNaN(Number(row.stock))) 
+        ? Number(row.stock) 
+        : 0;
+
       products.push({
         name: row.name,
         price: Number(row.price),
