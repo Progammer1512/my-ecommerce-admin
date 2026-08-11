@@ -17,10 +17,11 @@ const getCleanImageUrl = (url) => {
   return url;
 };
 
-// HELPER: SAFE NUMBER PARSER
-const parseCleanNumber = (val) => {
+// HELPER: CLEAN STOCK NUMERIC CONVERTER
+const parseCleanStock = (val) => {
   if (val === undefined || val === null || val === '') return 0;
-  const num = Number(String(val).replace(/[^0-9.]/g, ''));
+  const cleanStr = String(val).replace(/[^0-9]/g, '');
+  const num = parseInt(cleanStr, 10);
   return isNaN(num) ? 0 : num;
 };
 
@@ -75,6 +76,12 @@ function App() {
   const [newCouponDiscount, setNewCouponDiscount] = useState('');
   const [newCouponCategory, setNewCouponCategory] = useState('All');
   const [newCouponMaxUsage, setNewCouponMaxUsage] = useState(50);
+
+  // 🟢 HELPER: Tab select karte hi Sidebar drawer auto-close ho jayega
+  const handleTabSelect = (tabName) => {
+    setActiveTab(tabName);
+    setSidebarOpen(false); // Closes black sidebar immediately on mobile!
+  };
 
   const getAuthHeader = () => {
     const token = localStorage.getItem('adminToken');
@@ -377,7 +384,6 @@ function App() {
     setShowCustomCategory(false);
   };
 
-  // 🟢 CSV PARSER: Binds BOTH countInStock and stock keys so Mongo Model never drops it!
   const handleCsvUpload = (e) => {
     e.preventDefault();
     if (!csvFile) return alert('Please select a CSV file first!');
@@ -402,13 +408,12 @@ function App() {
             });
 
             const rawName = cleanRow.name || cleanRow.title || 'Imported Item';
-            const rawPrice = parseCleanNumber(cleanRow.price);
+            const rawPrice = parseCleanStock(cleanRow.price);
             const rawCategory = cleanRow.category || 'General';
             const rawDesc = cleanRow.description || '';
             const rawImage = cleanRow.image || 'https://via.placeholder.com/150';
-            const rawStock = parseCleanNumber(cleanRow.stock || cleanRow.countinstock || cleanRow.quantity || cleanRow.qty);
+            const rawStock = parseCleanStock(cleanRow.stock || cleanRow.countinstock || cleanRow.quantity || cleanRow.qty);
 
-            // 🟢 Send both stock & countInStock keys for 100% Schema matching
             const productPayload = {
               name: String(rawName).trim(),
               price: rawPrice,
@@ -478,14 +483,13 @@ function App() {
     }
   };
 
-  // 🟢 CREATE & EDIT SUBMIT HANDLER: Sends both countInStock & stock
   const handleProductSubmit = async (e) => {
     e.preventDefault();
-    const parsedStock = parseCleanNumber(stock);
+    const parsedStock = parseCleanStock(stock);
     
     const productData = { 
       name, 
-      price: parseCleanNumber(price), 
+      price: parseCleanStock(price), 
       category, 
       description, 
       image, 
@@ -508,7 +512,6 @@ function App() {
     }
   };
 
-  // 🟢 EDIT HANDLER: Reads countInStock OR stock from MongoDB response
   const handleEditProduct = (p) => {
     const targetId = p._id || p.id;
     setEditingId(targetId);
@@ -684,53 +687,81 @@ function App() {
         <span className="bg-white" style={{ width: '20px', height: '2px' }}></span>
       </button>
 
-      {/* SIDEBAR NAVIGATION */}
+      {/* 🟢 SIDEBAR NAVIGATION (With Auto-Close Feature Option) */}
       {sidebarOpen && (
-        <div className="bg-dark text-white p-3 d-flex flex-column" style={{ width: '260px', minHeight: '100vh', transition: '0.3s' }}>
-          <h4 className="text-warning fw-bold mb-1 px-2 pt-2">
-            <i className="bi bi-speedometer2 me-2"></i>TechStore Admin
-          </h4>
-          <small className="text-muted mb-4 px-2">Role: <span className="badge bg-info text-dark">{userRole}</span></small>
+        <div 
+          className="bg-dark text-white p-3 d-flex flex-column position-fixed top-0 start-0 z-3 shadow-lg" 
+          style={{ width: '260px', minHeight: '100vh', transition: '0.3s', zIndex: 1040 }}
+        >
+          <div className="d-flex align-items-center justify-content-between pt-2 mb-1">
+            <h4 className="text-warning fw-bold m-0">
+              <i className="bi bi-speedometer2 me-2"></i>TechStore Admin
+            </h4>
+            <button className="btn-close btn-close-white" onClick={() => setSidebarOpen(false)}></button>
+          </div>
+          <small className="text-muted mb-4 px-1">Role: <span className="badge bg-info text-dark">{userRole}</span></small>
 
+          {/* 🟢 ALL TAB BUTTONS NOW USE handleTabSelect TO AUTO-CLOSE SIDEBAR */}
           <div className="nav flex-column nav-pills gap-2">
             {hasTabAccess(userRole, 'dashboard') && (
-              <button className={`nav-link text-start fw-bold ${activeTab === 'dashboard' ? 'active bg-warning text-dark' : 'text-white'}`} onClick={() => setActiveTab('dashboard')}>
+              <button 
+                className={`nav-link text-start fw-bold ${activeTab === 'dashboard' ? 'active bg-warning text-dark' : 'text-white'}`} 
+                onClick={() => handleTabSelect('dashboard')}
+              >
                 <i className="bi bi-graph-up-arrow me-2"></i>Analytics Dashboard
               </button>
             )}
 
             {hasTabAccess(userRole, 'banners') && (
-              <button className={`nav-link text-start fw-bold ${activeTab === 'banners' ? 'active bg-warning text-dark' : 'text-white'}`} onClick={() => setActiveTab('banners')}>
+              <button 
+                className={`nav-link text-start fw-bold ${activeTab === 'banners' ? 'active bg-warning text-dark' : 'text-white'}`} 
+                onClick={() => handleTabSelect('banners')}
+              >
                 <i className="bi bi-images me-2"></i>🎨 Sliding Banners
               </button>
             )}
 
             {hasTabAccess(userRole, 'products') && (
-              <button className={`nav-link text-start fw-bold ${activeTab === 'products' ? 'active bg-warning text-dark' : 'text-white'}`} onClick={() => setActiveTab('products')}>
+              <button 
+                className={`nav-link text-start fw-bold ${activeTab === 'products' ? 'active bg-warning text-dark' : 'text-white'}`} 
+                onClick={() => handleTabSelect('products')}
+              >
                 <i className="bi bi-box-seam me-2"></i>Products & Stock
               </button>
             )}
 
             {hasTabAccess(userRole, 'orders') && (
-              <button className={`nav-link text-start fw-bold ${activeTab === 'orders' ? 'active bg-warning text-dark' : 'text-white'}`} onClick={() => setActiveTab('orders')}>
+              <button 
+                className={`nav-link text-start fw-bold ${activeTab === 'orders' ? 'active bg-warning text-dark' : 'text-white'}`} 
+                onClick={() => handleTabSelect('orders')}
+              >
                 <i className="bi bi-receipt me-2"></i>Orders & Shipping
               </button>
             )}
 
             {hasTabAccess(userRole, 'returns') && (
-              <button className={`nav-link text-start fw-bold ${activeTab === 'returns' ? 'active bg-warning text-dark' : 'text-white'}`} onClick={() => setActiveTab('returns')}>
+              <button 
+                className={`nav-link text-start fw-bold ${activeTab === 'returns' ? 'active bg-warning text-dark' : 'text-white'}`} 
+                onClick={() => handleTabSelect('returns')}
+              >
                 <i className="bi bi-arrow-counterclockwise me-2"></i>🔄 Return Requests ({returnRequestsCount})
               </button>
             )}
 
             {hasTabAccess(userRole, 'reviews') && (
-              <button className={`nav-link text-start fw-bold ${activeTab === 'reviews' ? 'active bg-warning text-dark' : 'text-white'}`} onClick={() => setActiveTab('reviews')}>
+              <button 
+                className={`nav-link text-start fw-bold ${activeTab === 'reviews' ? 'active bg-warning text-dark' : 'text-white'}`} 
+                onClick={() => handleTabSelect('reviews')}
+              >
                 <i className="bi bi-star-fill me-2"></i>⭐ Customer Reviews ({reviews.length})
               </button>
             )}
 
             {hasTabAccess(userRole, 'coupons') && (
-              <button className={`nav-link text-start fw-bold ${activeTab === 'coupons' ? 'active bg-warning text-dark' : 'text-white'}`} onClick={() => setActiveTab('coupons')}>
+              <button 
+                className={`nav-link text-start fw-bold ${activeTab === 'coupons' ? 'active bg-warning text-dark' : 'text-white'}`} 
+                onClick={() => handleTabSelect('coupons')}
+              >
                 <i className="bi bi-ticket-perforated me-2"></i>Marketing & Coupons ({coupons.length})
               </button>
             )}
@@ -746,7 +777,7 @@ function App() {
       )}
 
       {/* MAIN CONTENT AREA */}
-      <div className="flex-grow-1 p-4 overflow-auto pt-5" style={{ maxHeight: '100vh', paddingLeft: sidebarOpen ? '20px' : '60px' }}>
+      <div className="flex-grow-1 p-4 overflow-auto pt-5" style={{ maxHeight: '100vh', paddingLeft: '60px' }}>
         
         {activeTab === 'dashboard' && hasTabAccess(userRole, 'dashboard') && (
           <div>
@@ -1051,7 +1082,6 @@ function App() {
                       ) : (
                         products.map((p) => {
                           const targetId = p._id || p.id;
-                          // 🟢 READS countInStock OR stock FROM BACKEND
                           const rawVal = p.countInStock !== undefined ? p.countInStock : (p.stock !== undefined ? p.stock : 0);
                           const currentStock = Number(rawVal) || 0;
                           const isSelected = selectedProductIds.includes(targetId);
