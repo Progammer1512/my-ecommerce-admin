@@ -12,11 +12,11 @@ const {
   bulkDeleteProducts
 } = require('../controllers/productController');
 
-// 🟢 BULK ENDPOINTS (MUST BE PLACED BEFORE /:id ROUTE)
+// 🟢 BULK / SPECIAL ROUTES (Dynamic /:id Route se hamesha UPAR rahenge)
 router.post('/bulk-upload', upload.single('file'), bulkUploadProducts);
 router.post('/bulk-delete', bulkDeleteProducts);
 
-// STANDARD ROUTES
+// 📦 STANDARD CRUD ROUTES
 router.get('/', getProducts);
 router.post('/', createProduct);
 router.put('/:id', updateProduct);
