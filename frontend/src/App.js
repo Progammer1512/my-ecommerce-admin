@@ -17,33 +17,11 @@ const getCleanImageUrl = (url) => {
   return url;
 };
 
-// HELPER: CLEAN STOCK NUMERIC CONVERTER
-const parseCleanStock = (val) => {
+// HELPER: SAFE NUMBER PARSER
+const parseCleanNumber = (val) => {
   if (val === undefined || val === null || val === '') return 0;
-  const cleanStr = String(val).replace(/[^0-9]/g, '');
-  const num = parseInt(cleanStr, 10);
+  const num = Number(String(val).replace(/[^0-9.]/g, ''));
   return isNaN(num) ? 0 : num;
-};
-
-// HELPER: REGEX CSV ROW PARSER
-const parseCsvRow = (text) => {
-  const result = [];
-  let cell = '';
-  let inQuotes = false;
-  
-  for (let i = 0; i < text.length; i++) {
-    const char = text[i];
-    if (char === '"' || char === "'") {
-      inQuotes = !inQuotes;
-    } else if (char === ',' && !inQuotes) {
-      result.push(cell.trim().replace(/^["']|["']$/g, ''));
-      cell = '';
-    } else {
-      cell += char;
-    }
-  }
-  result.push(cell.trim().replace(/^["']|["']$/g, ''));
-  return result;
 };
 
 function App() {
@@ -399,7 +377,7 @@ function App() {
     setShowCustomCategory(false);
   };
 
-  // 🟢 PAPAPARSE DRIVEN CSV UPLOAD HANDLER (Clean BOM, quotes and \\r)
+  // 🟢 CSV PARSER: Binds BOTH countInStock and stock keys so Mongo Model never drops it!
   const handleCsvUpload = (e) => {
     e.preventDefault();
     if (!csvFile) return alert('Please select a CSV file first!');
@@ -418,26 +396,27 @@ function App() {
 
         try {
           const uploadPromises = rows.map((row) => {
-            // Normalize keys to avoid hidden spaces
             const cleanRow = {};
             Object.keys(row).forEach((k) => {
               cleanRow[k.trim().toLowerCase()] = row[k];
             });
 
             const rawName = cleanRow.name || cleanRow.title || 'Imported Item';
-            const rawPrice = parseCleanStock(cleanRow.price);
+            const rawPrice = parseCleanNumber(cleanRow.price);
             const rawCategory = cleanRow.category || 'General';
             const rawDesc = cleanRow.description || '';
             const rawImage = cleanRow.image || 'https://via.placeholder.com/150';
-            const rawStock = parseCleanStock(cleanRow.stock || cleanRow.quantity || cleanRow.qty);
+            const rawStock = parseCleanNumber(cleanRow.stock || cleanRow.countinstock || cleanRow.quantity || cleanRow.qty);
 
+            // 🟢 Send both stock & countInStock keys for 100% Schema matching
             const productPayload = {
               name: String(rawName).trim(),
               price: rawPrice,
               category: String(rawCategory).trim(),
               description: String(rawDesc).trim(),
               image: String(rawImage).trim(),
-              stock: rawStock // 🟢 Preserves 25, 15, 30 exact CSV quantity
+              stock: rawStock,
+              countInStock: rawStock
             };
 
             return axios.post(`${BASE_URL}/api/products`, productPayload, authConfig);
@@ -499,18 +478,19 @@ function App() {
     }
   };
 
-  // 🟢 DIRECT PRODUCT CREATE & EDIT HANDLER (Dynamic Quantity Sync to MongoDB)
+  // 🟢 CREATE & EDIT SUBMIT HANDLER: Sends both countInStock & stock
   const handleProductSubmit = async (e) => {
     e.preventDefault();
-    const parsedStock = parseCleanStock(stock);
+    const parsedStock = parseCleanNumber(stock);
     
     const productData = { 
       name, 
-      price: parseCleanStock(price), 
+      price: parseCleanNumber(price), 
       category, 
       description, 
       image, 
-      stock: parsedStock 
+      stock: parsedStock,
+      countInStock: parsedStock
     };
 
     try {
@@ -528,6 +508,7 @@ function App() {
     }
   };
 
+  // 🟢 EDIT HANDLER: Reads countInStock OR stock from MongoDB response
   const handleEditProduct = (p) => {
     const targetId = p._id || p.id;
     setEditingId(targetId);
@@ -536,7 +517,9 @@ function App() {
     setCategory(p.category);
     setDescription(p.description);
     setImage(getCleanImageUrl(p.image));
-    setStock(p.stock !== undefined && p.stock !== null ? Number(p.stock) : 0);
+    
+    const fetchedStock = p.countInStock !== undefined ? p.countInStock : (p.stock !== undefined ? p.stock : 0);
+    setStock(Number(fetchedStock));
   };
 
   const handleDeleteProduct = async (id) => {
@@ -1068,7 +1051,9 @@ function App() {
                       ) : (
                         products.map((p) => {
                           const targetId = p._id || p.id;
-                          const currentStock = p.stock !== undefined && p.stock !== null ? Number(p.stock) : 0;
+                          // 🟢 READS countInStock OR stock FROM BACKEND
+                          const rawVal = p.countInStock !== undefined ? p.countInStock : (p.stock !== undefined ? p.stock : 0);
+                          const currentStock = Number(rawVal) || 0;
                           const isSelected = selectedProductIds.includes(targetId);
 
                           return (
