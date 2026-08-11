@@ -675,12 +675,12 @@ function App() {
   return (
     <div className="d-flex bg-light min-vh-100 position-relative">
       
-      {/* 🟢 TOP HEADER BAR: HAMBURGER (LEFT) & LOGOUT BUTTON (RIGHT) - EXACT SAME LINE ALIGNMENT */}
+      {/* 🟢 TOP HEADER BAR: HAMBURGER (LEFT) & LOGOUT BUTTON (RIGHT) */}
       <div 
         className="position-fixed top-0 start-0 w-100 d-flex justify-content-between align-items-center px-3 py-2 bg-dark shadow" 
         style={{ zIndex: 1050, height: '56px' }}
       >
-        {/* 🟢 HAMBURGER BUTTON WITH CLEAR 3 LINES (NO MISSING ICONS) */}
+        {/* HAMBURGER BUTTON WITH 3 CLEAR LINES */}
         <button 
           className="btn btn-warning d-flex flex-column justify-content-center align-items-center p-2 shadow-sm rounded-2"
           onClick={() => setSidebarOpen(!sidebarOpen)}
@@ -694,7 +694,7 @@ function App() {
 
         <span className="fw-bold text-warning d-none d-sm-inline fs-5">TechStore Admin</span>
 
-        {/* 🟢 LOGOUT BUTTON (RIGHT) - ALIGNED WITH HAMBURGER */}
+        {/* LOGOUT BUTTON (RIGHT) */}
         <button 
           className="btn btn-danger btn-sm fw-bold px-3 py-1 rounded-pill shadow-sm d-flex align-items-center"
           onClick={handleLogout}
@@ -929,6 +929,7 @@ function App() {
           </div>
         )}
 
+        {/* 🟢 PRODUCTS & STOCK TAB: INVENTROY MANAGEMENT TABLE NOW FULLY RESPONSIVE */}
         {activeTab === 'products' && hasTabAccess(userRole, 'products') && (
           <div>
             <h3 className="fw-bold mb-4">Product Information & Inventory (PIM)</h3>
@@ -1038,7 +1039,7 @@ function App() {
               </div>
 
               <div className="col-lg-7">
-                <div className="card border-0 shadow-sm p-4 bg-white">
+                <div className="card border-0 shadow-sm p-3 bg-white">
                   <div className="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
                     <h5 className="fw-bold m-0">Live Inventory Management ({products.length})</h5>
                     
@@ -1064,77 +1065,80 @@ function App() {
                     )}
                   </div>
 
-                  <table className="table table-hover align-middle border">
-                    <thead className="table-dark">
-                      <tr>
-                        {userRole === 'SuperAdmin' && (
-                          <th style={{ width: '40px' }}>
-                            <input 
-                              type="checkbox" 
-                              className="form-check-input"
-                              checked={products.length > 0 && selectedProductIds.length === products.length}
-                              onChange={handleSelectAllProducts}
-                            />
-                          </th>
-                        )}
-                        <th>Item</th>
-                        <th>Category</th>
-                        <th>Price</th>
-                        <th>Stock Status</th>
-                        <th>Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {products.length === 0 ? (
+                  {/* 🟢 FULLY RESPONSIVE TABLE WRAPPER WITH INLINE NON-WRAPPING MIN-WIDTHS */}
+                  <div className="table-responsive">
+                    <table className="table table-hover align-middle border m-0">
+                      <thead className="table-dark">
                         <tr>
-                          <td colSpan={userRole === 'SuperAdmin' ? 6 : 5} className="text-center py-4 text-muted">
-                            No products found in database. Add new items or bulk upload CSV.
-                          </td>
+                          {userRole === 'SuperAdmin' && (
+                            <th style={{ width: '40px', minWidth: '40px', whiteSpace: 'nowrap' }}>
+                              <input 
+                                type="checkbox" 
+                                className="form-check-input"
+                                checked={products.length > 0 && selectedProductIds.length === products.length}
+                                onChange={handleSelectAllProducts}
+                              />
+                            </th>
+                          )}
+                          <th style={{ minWidth: '200px', whiteSpace: 'nowrap' }}>Item</th>
+                          <th style={{ minWidth: '140px', whiteSpace: 'nowrap' }}>Category</th>
+                          <th style={{ minWidth: '110px', whiteSpace: 'nowrap' }}>Price</th>
+                          <th style={{ minWidth: '150px', whiteSpace: 'nowrap' }}>Stock Status</th>
+                          <th style={{ minWidth: '140px', whiteSpace: 'nowrap' }}>Actions</th>
                         </tr>
-                      ) : (
-                        products.map((p) => {
-                          const targetId = p._id || p.id;
-                          const rawVal = p.countInStock !== undefined ? p.countInStock : (p.stock !== undefined ? p.stock : 0);
-                          const currentStock = Number(rawVal) || 0;
-                          const isSelected = selectedProductIds.includes(targetId);
-
-                          return (
-                          <tr key={targetId} className={isSelected ? 'table-warning' : ''}>
-                            {userRole === 'SuperAdmin' && (
-                              <td>
-                                <input 
-                                  type="checkbox" 
-                                  className="form-check-input"
-                                  checked={isSelected}
-                                  onChange={() => handleToggleSelectProduct(targetId)}
-                                />
-                              </td>
-                            )}
-                            <td className="fw-bold small">{p.name}</td>
-                            <td><span className="badge bg-secondary">{p.category}</span></td>
-                            <td className="text-success fw-bold">₹{p.price}</td>
-                            <td>
-                              {currentStock <= 0 ? (
-                                <span className="badge bg-danger">Out of Stock (0)</span>
-                              ) : currentStock < 5 ? (
-                                <span className="badge bg-warning text-dark">Low Stock ({currentStock})</span>
-                              ) : (
-                                <span className="badge bg-success">In Stock ({currentStock})</span>
-                              )}
-                            </td>
-                            <td>
-                              <div className="btn-group btn-group-sm">
-                                <button className="btn btn-outline-primary" onClick={() => handleEditProduct(p)}>Edit</button>
-                                {userRole === 'SuperAdmin' && (
-                                  <button className="btn btn-outline-danger" onClick={() => handleDeleteProduct(targetId)}>Delete</button>
-                                )}
-                              </div>
+                      </thead>
+                      <tbody>
+                        {products.length === 0 ? (
+                          <tr>
+                            <td colSpan={userRole === 'SuperAdmin' ? 6 : 5} className="text-center py-4 text-muted">
+                              No products found in database. Add new items or bulk upload CSV.
                             </td>
                           </tr>
-                        )})
-                      )}
-                    </tbody>
-                  </table>
+                        ) : (
+                          products.map((p) => {
+                            const targetId = p._id || p.id;
+                            const rawVal = p.countInStock !== undefined ? p.countInStock : (p.stock !== undefined ? p.stock : 0);
+                            const currentStock = Number(rawVal) || 0;
+                            const isSelected = selectedProductIds.includes(targetId);
+
+                            return (
+                            <tr key={targetId} className={isSelected ? 'table-warning' : ''}>
+                              {userRole === 'SuperAdmin' && (
+                                <td style={{ whiteSpace: 'nowrap' }}>
+                                  <input 
+                                    type="checkbox" 
+                                    className="form-check-input"
+                                    checked={isSelected}
+                                    onChange={() => handleToggleSelectProduct(targetId)}
+                                  />
+                                </td>
+                              )}
+                              <td className="fw-bold small" style={{ whiteSpace: 'nowrap' }}>{p.name}</td>
+                              <td style={{ whiteSpace: 'nowrap' }}><span className="badge bg-secondary">{p.category}</span></td>
+                              <td className="text-success fw-bold" style={{ whiteSpace: 'nowrap' }}>₹{p.price}</td>
+                              <td style={{ whiteSpace: 'nowrap' }}>
+                                {currentStock <= 0 ? (
+                                  <span className="badge bg-danger">Out of Stock (0)</span>
+                                ) : currentStock < 5 ? (
+                                  <span className="badge bg-warning text-dark">Low Stock ({currentStock})</span>
+                                ) : (
+                                  <span className="badge bg-success">In Stock ({currentStock})</span>
+                                )}
+                              </td>
+                              <td style={{ whiteSpace: 'nowrap' }}>
+                                <div className="btn-group btn-group-sm">
+                                  <button className="btn btn-outline-primary" onClick={() => handleEditProduct(p)}>Edit</button>
+                                  {userRole === 'SuperAdmin' && (
+                                    <button className="btn btn-outline-danger" onClick={() => handleDeleteProduct(targetId)}>Delete</button>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          )})
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               </div>
             </div>
