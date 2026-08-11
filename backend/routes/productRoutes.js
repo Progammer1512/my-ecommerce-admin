@@ -8,13 +8,15 @@ const {
   createProduct,
   updateProduct,
   deleteProduct,
-  bulkUploadProducts
+  bulkUploadProducts,
+  bulkDeleteProducts
 } = require('../controllers/productController');
 
-// 🟢 FIX: /bulk-upload Route hamesha /:id se UPAR hona chahiye
+// 🟢 BULK ROUTES (MUST BE PLACED BEFORE Dynamic /:id Route)
 router.post('/bulk-upload', upload.single('file'), bulkUploadProducts);
+router.post('/bulk-delete', bulkDeleteProducts);
 
-// Product Standard Routes
+// STANDARD PRODUCT ROUTES
 router.get('/', getProducts);
 router.post('/', createProduct);
 router.put('/:id', updateProduct);

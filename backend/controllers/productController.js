@@ -2,7 +2,7 @@ const Product = require('../models/Product');
 const fs = require('fs');
 const csv = require('csv-parser');
 
-// Get All Products (Used by both Admin & Customer frontend)
+// Get All Products
 exports.getProducts = async (req, res) => {
   try {
     const products = await Product.find().sort({ createdAt: -1 });
@@ -12,15 +12,11 @@ exports.getProducts = async (req, res) => {
   }
 };
 
-// Create Product
+// Create Single Product
 exports.createProduct = async (req, res) => {
   try {
     const { name, price, category, description, image, stock } = req.body;
-    
-    // 🔧 STRICT FIX: Fallback to 0 instead of 10 if stock is invalid/empty
-    const finalStock = (stock !== undefined && stock !== '' && !isNaN(Number(stock))) 
-      ? Number(stock) 
-      : 0;
+    const finalStock = (stock !== undefined && stock !== '' && !isNaN(Number(stock))) ? Number(stock) : 0;
 
     const product = new Product({
       name,
@@ -30,7 +26,6 @@ exports.createProduct = async (req, res) => {
       image,
       stock: finalStock
     });
-    
     const savedProduct = await product.save();
     res.status(201).json(savedProduct);
   } catch (error) {
@@ -50,8 +45,6 @@ exports.updateProduct = async (req, res) => {
       product.category = category !== undefined ? category : product.category;
       product.description = description !== undefined ? description : product.description;
       product.image = image !== undefined ? image : product.image;
-      
-      // 🔧 STRICT FIX: Directly set the exact number entered by user
       if (stock !== undefined && stock !== null && stock !== '' && !isNaN(Number(stock))) {
         product.stock = Number(stock);
       }
@@ -66,13 +59,29 @@ exports.updateProduct = async (req, res) => {
   }
 };
 
-// Delete Product
+// Delete Single Product
 exports.deleteProduct = async (req, res) => {
   try {
     await Product.findByIdAndDelete(req.params.id);
     res.json({ message: 'Product deleted successfully' });
   } catch (error) {
     res.status(500).json({ message: error.message });
+  }
+};
+
+// 🔴 NEW: BULK DELETE ALL OR SELECTED PRODUCTS
+exports.bulkDeleteProducts = async (req, res) => {
+  try {
+    const { ids } = req.body; // Array of product IDs, or empty/null to delete ALL
+    if (ids && Array.isArray(ids) && ids.length > 0) {
+      await Product.deleteMany({ _id: { $in: ids } });
+      res.json({ message: `🔥 Successfully deleted ${ids.length} selected products!` });
+    } else {
+      await Product.deleteMany({});
+      res.json({ message: '🔥 Successfully wiped ALL products from Database!' });
+    }
+  } catch (error) {
+    res.status(500).json({ message: 'Bulk delete failed: ' + error.message });
   }
 };
 
@@ -88,14 +97,10 @@ exports.bulkUploadProducts = async (req, res) => {
   fs.createReadStream(filePath)
     .pipe(csv())
     .on('data', (row) => {
-      // 🔧 STRICT FIX: Fallback to 0 if CSV stock column is missing or empty
-      const parsedStock = (row.stock !== undefined && row.stock !== '' && !isNaN(Number(row.stock))) 
-        ? Number(row.stock) 
-        : 0;
-
+      const parsedStock = (row.stock !== undefined && row.stock !== '' && !isNaN(Number(row.stock))) ? Number(row.stock) : 0;
       products.push({
         name: row.name,
-        price: Number(row.price),
+        price: Number(row.price) || 0,
         category: row.category || 'General',
         description: row.description || '',
         image: row.image || 'https://via.placeholder.com/150',
@@ -116,6 +121,7 @@ exports.bulkUploadProducts = async (req, res) => {
       }
     })
     .on('error', (error) => {
+      if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
       res.status(500).json({ message: 'Error reading CSV file: ' + error.message });
     });
 };
