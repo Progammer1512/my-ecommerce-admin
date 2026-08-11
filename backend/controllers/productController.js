@@ -2,7 +2,7 @@ const Product = require('../models/Product');
 const fs = require('fs');
 const csv = require('csv-parser');
 
-// Get All Products
+// 1. Get All Products
 exports.getProducts = async (req, res) => {
   try {
     const products = await Product.find().sort({ createdAt: -1 });
@@ -12,11 +12,11 @@ exports.getProducts = async (req, res) => {
   }
 };
 
-// Create Product
+// 2. Create Single Product
 exports.createProduct = async (req, res) => {
   try {
     const { name, price, category, description, image, stock } = req.body;
-    const finalStock = (stock !== undefined && stock !== '' && !isNaN(Number(stock))) ? Number(stock) : 0;
+    const finalStock = (stock !== undefined && stock !== null && stock !== '' && !isNaN(Number(stock))) ? Number(stock) : 0;
 
     const product = new Product({
       name,
@@ -33,20 +33,23 @@ exports.createProduct = async (req, res) => {
   }
 };
 
-// Update Product
+// 3. Update Product (Strict Stock Number Binding)
 exports.updateProduct = async (req, res) => {
   try {
     const { name, price, category, description, image, stock } = req.body;
     const product = await Product.findById(req.params.id);
 
     if (product) {
-      product.name = name !== undefined ? name : product.name;
-      product.price = price !== undefined ? Number(price) : product.price;
-      product.category = category !== undefined ? category : product.category;
-      product.description = description !== undefined ? description : product.description;
-      product.image = image !== undefined ? image : product.image;
-      if (stock !== undefined && stock !== null && stock !== '' && !isNaN(Number(stock))) {
-        product.stock = Number(stock);
+      if (name !== undefined) product.name = name;
+      if (price !== undefined) product.price = Number(price);
+      if (category !== undefined) product.category = category;
+      if (description !== undefined) product.description = description;
+      if (image !== undefined) product.image = image;
+      
+      // 🟢 STRICT FIX: Always convert updated stock to Number
+      if (stock !== undefined && stock !== null && stock !== '') {
+        const parsedStock = Number(stock);
+        product.stock = isNaN(parsedStock) ? 0 : parsedStock;
       }
 
       const updatedProduct = await product.save();
@@ -59,7 +62,7 @@ exports.updateProduct = async (req, res) => {
   }
 };
 
-// Delete Single Product
+// 4. Delete Single Product
 exports.deleteProduct = async (req, res) => {
   try {
     await Product.findByIdAndDelete(req.params.id);
@@ -69,7 +72,7 @@ exports.deleteProduct = async (req, res) => {
   }
 };
 
-// 🔴 BULK DELETE PRODUCTS (Selected or ALL)
+// 5. Bulk Delete Products
 exports.bulkDeleteProducts = async (req, res) => {
   try {
     const { ids } = req.body;
@@ -85,7 +88,7 @@ exports.bulkDeleteProducts = async (req, res) => {
   }
 };
 
-// Bulk CSV Upload
+// 6. Bulk CSV Upload
 exports.bulkUploadProducts = async (req, res) => {
   if (!req.file) {
     return res.status(400).json({ message: 'Please upload a CSV file' });
