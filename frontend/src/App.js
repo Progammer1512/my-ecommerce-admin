@@ -77,10 +77,10 @@ function App() {
   const [newCouponCategory, setNewCouponCategory] = useState('All');
   const [newCouponMaxUsage, setNewCouponMaxUsage] = useState(50);
 
-  // 🟢 HELPER: Tab select karte hi Sidebar drawer auto-close ho jayega
+  // HELPER: Tab select karte hi Sidebar drawer auto-close ho jayega
   const handleTabSelect = (tabName) => {
     setActiveTab(tabName);
-    setSidebarOpen(false); // Closes black sidebar immediately on mobile!
+    setSidebarOpen(false);
   };
 
   const getAuthHeader = () => {
@@ -687,7 +687,7 @@ function App() {
         <span className="bg-white" style={{ width: '20px', height: '2px' }}></span>
       </button>
 
-      {/* 🟢 SIDEBAR NAVIGATION (With Auto-Close Feature Option) */}
+      {/* 🟢 SIDEBAR NAVIGATION */}
       {sidebarOpen && (
         <div 
           className="bg-dark text-white p-3 d-flex flex-column position-fixed top-0 start-0 z-3 shadow-lg" 
@@ -701,7 +701,6 @@ function App() {
           </div>
           <small className="text-muted mb-4 px-1">Role: <span className="badge bg-info text-dark">{userRole}</span></small>
 
-          {/* 🟢 ALL TAB BUTTONS NOW USE handleTabSelect TO AUTO-CLOSE SIDEBAR */}
           <div className="nav flex-column nav-pills gap-2">
             {hasTabAccess(userRole, 'dashboard') && (
               <button 
@@ -1129,6 +1128,7 @@ function App() {
           </div>
         )}
 
+        {/* 🟢 ORDERS & SHIPPING TAB: WIDE NON-WRAPPING RESPONSIVE TABLE */}
         {activeTab === 'orders' && hasTabAccess(userRole, 'orders') && (
           <div>
             <div className="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
@@ -1171,87 +1171,91 @@ function App() {
               </div>
             </div>
 
-            <div className="card border-0 shadow-sm p-4 bg-white">
-              <table className="table table-bordered table-hover align-middle">
-                <thead className="table-dark">
-                  <tr>
-                    <th>Order ID</th>
-                    <th>Customer Name</th>
-                    <th>Total Price</th>
-                    <th>Payment Method</th>
-                    <th>Current Status</th>
-                    <th>Update Fulfillment Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredOrders.length === 0 ? (
+            {/* 🟢 EXPANDED RESPONSIVE CONTAINER WITH NO-WRAP COLUMNS */}
+            <div className="card border-0 shadow-sm p-3 bg-white">
+              <div className="table-responsive">
+                <table className="table table-bordered table-hover align-middle m-0">
+                  <thead className="table-dark text-nowrap">
                     <tr>
-                      <td colSpan="6" className="text-center py-5 text-muted">
-                        <i className="bi bi-search fs-2 d-block mb-2 text-secondary"></i>
-                        <h5>No orders found matching your selected filter.</h5>
-                        <button 
-                          className="btn btn-link btn-sm fw-bold text-primary" 
-                          onClick={() => { setOrderSearchTerm(''); setOrderStatusFilter('ALL'); }}
-                        >
-                          Clear All Filters
-                        </button>
-                      </td>
+                      <th style={{ minWidth: '130px' }}>Order ID</th>
+                      <th style={{ minWidth: '180px' }}>Customer Name</th>
+                      <th style={{ minWidth: '120px' }}>Total Price</th>
+                      <th style={{ minWidth: '180px' }}>Payment Method</th>
+                      <th style={{ minWidth: '150px' }}>Current Status</th>
+                      <th style={{ minWidth: '220px' }}>Update Fulfillment Status</th>
                     </tr>
-                  ) : (
-                    filteredOrders.map((o, idx) => {
-                      const orderId = o._id || o.id || o.orderId || null;
-
-                      return (
-                      <tr key={orderId || idx}>
-                        <td className="fw-bold text-primary">#{orderId ? orderId : 'N/A'}</td>
-                        <td className="fw-bold">
-                          {o.shippingAddress?.name || 'Customer'}
-                          {o.userEmail && <small className="text-muted d-block">{o.userEmail}</small>}
-                        </td>
-                        <td className="text-success fw-bold fs-6">₹{o.totalPrice}</td>
-                        <td>
-                          <span className="badge bg-info text-dark px-2 py-1">{o.paymentMethod || 'COD'}</span>
-                        </td>
-                        <td>
-                          <span className={`badge px-3 py-2 ${
-                            o.status === 'Delivered' ? 'bg-success' : 
-                            o.status === 'In Transit' || o.status === 'Shipped' || o.status === 'Out for Delivery' ? 'bg-primary' :
-                            o.status && o.status.includes('Return') ? 'bg-warning text-dark' :
-                            o.status && o.status.includes('Refund') ? 'bg-info text-dark' :
-                            o.status === 'Cancelled' ? 'bg-danger' : 'bg-warning text-dark'
-                          }`}>
-                            {o.status || 'Processing'}
-                          </span>
-                        </td>
-                        <td>
-                          <select 
-                            className="form-select form-select-sm fw-bold" 
-                            value={o.status || 'Processing'}
-                            onChange={(e) => {
-                              if (!orderId || orderId.startsWith('LOCAL_ID_')) {
-                                alert("Yeh order database me nahi hai. Kripya naya order place karein.");
-                                return;
-                              }
-                              handleOrderStatusChange(orderId, e.target.value);
-                            }}
+                  </thead>
+                  <tbody className="text-nowrap">
+                    {filteredOrders.length === 0 ? (
+                      <tr>
+                        <td colSpan="6" className="text-center py-5 text-muted">
+                          <i className="bi bi-search fs-2 d-block mb-2 text-secondary"></i>
+                          <h5>No orders found matching your selected filter.</h5>
+                          <button 
+                            className="btn btn-link btn-sm fw-bold text-primary" 
+                            onClick={() => { setOrderSearchTerm(''); setOrderStatusFilter('ALL'); }}
                           >
-                            <option value="Pending">Pending</option>
-                            <option value="Processing">Processing</option>
-                            <option value="Shipped">Shipped</option>
-                            <option value="In Transit">In Transit</option>
-                            <option value="Out for Delivery">Out for Delivery</option>
-                            <option value="Delivered">Delivered</option>
-                            <option value="Return Approved">Return Approved</option>
-                            <option value="Replacement Shipped">Replacement Shipped</option>
-                            <option value="Refund Processed">Refund Processed</option>
-                            <option value="Cancelled">Cancelled</option>
-                          </select>
+                            Clear All Filters
+                          </button>
                         </td>
                       </tr>
-                    )})
-                  )}
-                </tbody>
-              </table>
+                    ) : (
+                      filteredOrders.map((o, idx) => {
+                        const orderId = o._id || o.id || o.orderId || null;
+
+                        return (
+                        <tr key={orderId || idx}>
+                          <td className="fw-bold text-primary">#{orderId ? orderId : 'N/A'}</td>
+                          <td className="fw-bold">
+                            {o.shippingAddress?.name || 'Customer'}
+                            {o.userEmail && <small className="text-muted d-block">{o.userEmail}</small>}
+                          </td>
+                          <td className="text-success fw-bold fs-6">₹{o.totalPrice}</td>
+                          <td>
+                            <span className="badge bg-info text-dark px-2 py-1">{o.paymentMethod || 'COD'}</span>
+                          </td>
+                          <td>
+                            <span className={`badge px-3 py-2 ${
+                              o.status === 'Delivered' ? 'bg-success' : 
+                              o.status === 'In Transit' || o.status === 'Shipped' || o.status === 'Out for Delivery' ? 'bg-primary' :
+                              o.status && o.status.includes('Return') ? 'bg-warning text-dark' :
+                              o.status && o.status.includes('Refund') ? 'bg-info text-dark' :
+                              o.status === 'Cancelled' ? 'bg-danger' : 'bg-warning text-dark'
+                            }`}>
+                              {o.status || 'Processing'}
+                            </span>
+                          </td>
+                          <td>
+                            <select 
+                              className="form-select form-select-sm fw-bold shadow-sm" 
+                              style={{ minWidth: '200px' }}
+                              value={o.status || 'Processing'}
+                              onChange={(e) => {
+                                if (!orderId || orderId.startsWith('LOCAL_ID_')) {
+                                  alert("Yeh order database me nahi hai. Kripya naya order place karein.");
+                                  return;
+                                }
+                                handleOrderStatusChange(orderId, e.target.value);
+                              }}
+                            >
+                              <option value="Pending">Pending</option>
+                              <option value="Processing">Processing</option>
+                              <option value="Shipped">Shipped</option>
+                              <option value="In Transit">In Transit</option>
+                              <option value="Out for Delivery">Out for Delivery</option>
+                              <option value="Delivered">Delivered</option>
+                              <option value="Return Approved">Return Approved</option>
+                              <option value="Replacement Shipped">Replacement Shipped</option>
+                              <option value="Refund Processed">Refund Processed</option>
+                              <option value="Cancelled">Cancelled</option>
+                            </select>
+                          </td>
+                        </tr>
+                      )})
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
         )}
@@ -1265,74 +1269,77 @@ function App() {
               </button>
             </div>
 
-            <div className="card border-0 shadow-sm p-4 bg-white">
-              <table className="table table-bordered table-hover align-middle">
-                <thead className="table-dark">
-                  <tr>
-                    <th>Order ID</th>
-                    <th>Customer Name</th>
-                    <th>Request Type</th>
-                    <th>Reason & Details</th>
-                    <th>Current Status</th>
-                    <th>Process Request Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {orders.filter(o => o.status && o.status.includes('Return')).length === 0 ? (
+            <div className="card border-0 shadow-sm p-3 bg-white">
+              <div className="table-responsive">
+                <table className="table table-bordered table-hover align-middle m-0">
+                  <thead className="table-dark text-nowrap">
                     <tr>
-                      <td colSpan="6" className="text-center py-5 text-muted">
-                        <i className="bi bi-arrow-counterclockwise fs-2 d-block mb-2 text-secondary"></i>
-                        <h5>No active return or refund requests found.</h5>
-                      </td>
+                      <th style={{ minWidth: '130px' }}>Order ID</th>
+                      <th style={{ minWidth: '180px' }}>Customer Name</th>
+                      <th style={{ minWidth: '150px' }}>Request Type</th>
+                      <th style={{ minWidth: '220px' }}>Reason & Details</th>
+                      <th style={{ minWidth: '150px' }}>Current Status</th>
+                      <th style={{ minWidth: '220px' }}>Process Request Action</th>
                     </tr>
-                  ) : (
-                    orders.filter(o => o.status && o.status.includes('Return')).map((o, idx) => {
-                      const orderId = o._id || o.id || o.orderId || null;
-                      return (
-                      <tr key={orderId || idx}>
-                        <td className="fw-bold text-primary">#{orderId ? orderId : 'N/A'}</td>
-                        <td className="fw-bold">
-                          {o.shippingAddress?.name || 'Customer'}
-                          <small className="text-muted d-block">{o.userEmail}</small>
-                        </td>
-                        <td>
-                          <span className="badge bg-danger px-3 py-2 fw-bold">
-                            {o.returnRequest?.returnType || 'Refund / Replace'}
-                          </span>
-                        </td>
-                        <td>
-                          <strong className="text-dark d-block">{o.returnRequest?.reason || 'Defective / Damaged'}</strong>
-                          <small className="text-muted">{o.returnRequest?.comments || 'No extra comments provided.'}</small>
-                        </td>
-                        <td>
-                          <span className="badge bg-warning text-dark px-3 py-2 fw-bold fs-6">
-                            {o.status}
-                          </span>
-                        </td>
-                        <td>
-                          <select 
-                            className="form-select form-select-sm fw-bold border-danger" 
-                            value={o.status}
-                            onChange={(e) => {
-                              if (!orderId || orderId.startsWith('LOCAL_ID_')) {
-                                alert("Yeh order database me nahi hai.");
-                                return;
-                              }
-                              handleOrderStatusChange(orderId, e.target.value);
-                            }}
-                          >
-                            <option value={o.status}>-- Action --</option>
-                            <option value="Return Approved">✅ Approve Return Request</option>
-                            <option value="Replacement Shipped">🚚 Ship Replacement Unit</option>
-                            <option value="Refund Processed">💵 Refund Money to Customer</option>
-                            <option value="Delivered">❌ Reject Return Request</option>
-                          </select>
+                  </thead>
+                  <tbody className="text-nowrap">
+                    {orders.filter(o => o.status && o.status.includes('Return')).length === 0 ? (
+                      <tr>
+                        <td colSpan="6" className="text-center py-5 text-muted">
+                          <i className="bi bi-arrow-counterclockwise fs-2 d-block mb-2 text-secondary"></i>
+                          <h5>No active return or refund requests found.</h5>
                         </td>
                       </tr>
-                    )})
-                  )}
-                </tbody>
-              </table>
+                    ) : (
+                      orders.filter(o => o.status && o.status.includes('Return')).map((o, idx) => {
+                        const orderId = o._id || o.id || o.orderId || null;
+                        return (
+                        <tr key={orderId || idx}>
+                          <td className="fw-bold text-primary">#{orderId ? orderId : 'N/A'}</td>
+                          <td className="fw-bold">
+                            {o.shippingAddress?.name || 'Customer'}
+                            <small className="text-muted d-block">{o.userEmail}</small>
+                          </td>
+                          <td>
+                            <span className="badge bg-danger px-3 py-2 fw-bold">
+                              {o.returnRequest?.returnType || 'Refund / Replace'}
+                            </span>
+                          </td>
+                          <td>
+                            <strong className="text-dark d-block">{o.returnRequest?.reason || 'Defective / Damaged'}</strong>
+                            <small className="text-muted">{o.returnRequest?.comments || 'No extra comments provided.'}</small>
+                          </td>
+                          <td>
+                            <span className="badge bg-warning text-dark px-3 py-2 fw-bold fs-6">
+                              {o.status}
+                            </span>
+                          </td>
+                          <td>
+                            <select 
+                              className="form-select form-select-sm fw-bold border-danger" 
+                              style={{ minWidth: '200px' }}
+                              value={o.status}
+                              onChange={(e) => {
+                                if (!orderId || orderId.startsWith('LOCAL_ID_')) {
+                                  alert("Yeh order database me nahi hai.");
+                                  return;
+                                }
+                                handleOrderStatusChange(orderId, e.target.value);
+                              }}
+                            >
+                              <option value={o.status}>-- Action --</option>
+                              <option value="Return Approved">✅ Approve Return Request</option>
+                              <option value="Replacement Shipped">🚚 Ship Replacement Unit</option>
+                              <option value="Refund Processed">💵 Refund Money to Customer</option>
+                              <option value="Delivered">❌ Reject Return Request</option>
+                            </select>
+                          </td>
+                        </tr>
+                      )})
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
         )}
@@ -1346,44 +1353,46 @@ function App() {
               </button>
             </div>
 
-            <div className="card border-0 shadow-sm p-4 bg-white">
-              <table className="table table-bordered table-hover align-middle">
-                <thead className="table-dark">
-                  <tr>
-                    <th>Order ID</th>
-                    <th>Customer Name</th>
-                    <th>Rating</th>
-                    <th>Review Comment</th>
-                    <th>Date</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {reviews.length === 0 ? (
+            <div className="card border-0 shadow-sm p-3 bg-white">
+              <div className="table-responsive">
+                <table className="table table-bordered table-hover align-middle m-0">
+                  <thead className="table-dark text-nowrap">
                     <tr>
-                      <td colSpan="5" className="text-center py-5 text-muted">
-                        <i className="bi bi-chat-square-quote fs-2 d-block mb-2 text-secondary"></i>
-                        <h5>No customer reviews submitted yet.</h5>
-                      </td>
+                      <th style={{ minWidth: '130px' }}>Order ID</th>
+                      <th style={{ minWidth: '180px' }}>Customer Name</th>
+                      <th style={{ minWidth: '120px' }}>Rating</th>
+                      <th style={{ minWidth: '250px' }}>Review Comment</th>
+                      <th style={{ minWidth: '120px' }}>Date</th>
                     </tr>
-                  ) : (
-                    reviews.map((rev, idx) => {
-                      const reviewId = rev.orderId || rev.id || rev._id || `REV_${idx}`;
-                      return (
-                      <tr key={idx}>
-                        <td className="fw-bold text-primary">#{reviewId}</td>
-                        <td className="fw-bold">{rev.customerName} <small className="text-muted d-block">{rev.customerEmail}</small></td>
-                        <td>
-                          <span className="badge bg-warning text-dark fw-bold fs-6">
-                            {'★'.repeat(rev.rating || 5)} {rev.rating}/5
-                          </span>
+                  </thead>
+                  <tbody className="text-nowrap">
+                    {reviews.length === 0 ? (
+                      <tr>
+                        <td colSpan="5" className="text-center py-5 text-muted">
+                          <i className="bi bi-chat-square-quote fs-2 d-block mb-2 text-secondary"></i>
+                          <h5>No customer reviews submitted yet.</h5>
                         </td>
-                        <td className="fw-semibold text-dark">{rev.comment || 'No comment provided'}</td>
-                        <td className="small text-muted">{rev.date || 'Recent'}</td>
                       </tr>
-                    )})
-                  )}
-                </tbody>
-              </table>
+                    ) : (
+                      reviews.map((rev, idx) => {
+                        const reviewId = rev.orderId || rev.id || rev._id || `REV_${idx}`;
+                        return (
+                        <tr key={idx}>
+                          <td className="fw-bold text-primary">#{reviewId}</td>
+                          <td className="fw-bold">{rev.customerName} <small className="text-muted d-block">{rev.customerEmail}</small></td>
+                          <td>
+                            <span className="badge bg-warning text-dark fw-bold fs-6">
+                              {'★'.repeat(rev.rating || 5)} {rev.rating}/5
+                            </span>
+                          </td>
+                          <td className="fw-semibold text-dark">{rev.comment || 'No comment provided'}</td>
+                          <td className="small text-muted">{rev.date || 'Recent'}</td>
+                        </tr>
+                      )})
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
         )}
@@ -1440,50 +1449,52 @@ function App() {
               <div className="col-md-7">
                 <div className="card border-0 shadow-sm p-4 bg-white">
                   <h5 className="fw-bold mb-3">Active Promotional Coupons ({coupons.length})</h5>
-                  <table className="table table-bordered table-hover align-middle">
-                    <thead className="table-dark">
-                      <tr>
-                        <th>Code</th>
-                        <th>Category</th>
-                        <th>Discount</th>
-                        <th>Redemption Usage</th>
-                        <th>Status</th>
-                        <th>Action</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {coupons.map((c, idx) => {
-                        const couponId = c._id || c.code;
-                        return (
-                        <tr key={couponId}>
-                          <td className="fw-bold text-primary">{c.code}</td>
-                          <td>
-                            <span className={`badge ${c.category === 'All' ? 'bg-primary' : 'bg-info text-dark'} fw-bold`}>
-                              {c.category || 'All'}
-                            </span>
-                          </td>
-                          <td className="fw-bold text-success">{c.discount}% OFF</td>
-                          <td>
-                            <span className={`badge ${(c.usedCount || 0) >= (c.maxUsage || 100) ? 'bg-danger' : 'bg-secondary'} px-2 py-1`}>
-                              {c.usedCount || 0} / {c.maxUsage || 100} Used
-                            </span>
-                          </td>
-                          <td>
-                            {(c.usedCount || 0) >= (c.maxUsage || 100) ? (
-                              <span className="badge bg-danger">Exhausted</span>
-                            ) : (
-                              <span className="badge bg-success">{c.status || 'Active'}</span>
-                            )}
-                          </td>
-                          <td>
-                            <button className="btn btn-sm btn-outline-danger fw-bold" onClick={() => handleDeleteCoupon(couponId)}>
-                              Delete
-                            </button>
-                          </td>
+                  <div className="table-responsive">
+                    <table className="table table-bordered table-hover align-middle m-0">
+                      <thead className="table-dark text-nowrap">
+                        <tr>
+                          <th>Code</th>
+                          <th>Category</th>
+                          <th>Discount</th>
+                          <th>Redemption Usage</th>
+                          <th>Status</th>
+                          <th>Action</th>
                         </tr>
-                      )})}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody className="text-nowrap">
+                        {coupons.map((c, idx) => {
+                          const couponId = c._id || c.code;
+                          return (
+                          <tr key={couponId}>
+                            <td className="fw-bold text-primary">{c.code}</td>
+                            <td>
+                              <span className={`badge ${c.category === 'All' ? 'bg-primary' : 'bg-info text-dark'} fw-bold`}>
+                                {c.category || 'All'}
+                              </span>
+                            </td>
+                            <td className="fw-bold text-success">{c.discount}% OFF</td>
+                            <td>
+                              <span className={`badge ${(c.usedCount || 0) >= (c.maxUsage || 100) ? 'bg-danger' : 'bg-secondary'} px-2 py-1`}>
+                                {c.usedCount || 0} / {c.maxUsage || 100} Used
+                              </span>
+                            </td>
+                            <td>
+                              {(c.usedCount || 0) >= (c.maxUsage || 100) ? (
+                                <span className="badge bg-danger">Exhausted</span>
+                              ) : (
+                                <span className="badge bg-success">{c.status || 'Active'}</span>
+                              )}
+                            </td>
+                            <td>
+                              <button className="btn btn-sm btn-outline-danger fw-bold" onClick={() => handleDeleteCoupon(couponId)}>
+                                Delete
+                              </button>
+                            </td>
+                          </tr>
+                        )})}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               </div>
             </div>
