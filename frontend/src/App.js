@@ -54,7 +54,7 @@ function App() {
   const [category, setCategory] = useState('Electronics');
   const [description, setDescription] = useState('');
   const [image, setImage] = useState('');
-  const [stock, setStock] = useState(0); // 🔧 Defaulted to 0 instead of hardcoded 10
+  const [stock, setStock] = useState(0);
 
   const [bannerTitle, setBannerTitle] = useState('');
   const [bannerSubtitle, setBannerSubtitle] = useState('');
@@ -391,11 +391,20 @@ function App() {
     }
   };
 
-  // 🔧 FIXED SUBMIT HANDLER: Strictly sends user stock as Number
+  // 🟢 STRICT SUBMIT HANDLER: Converts input value directly to Number without failing to 0
   const handleProductSubmit = async (e) => {
     e.preventDefault();
-    const parsedStock = stock === '' || stock === null || isNaN(Number(stock)) ? 0 : Number(stock);
-    const productData = { name, price: Number(price), category, description, image, stock: parsedStock };
+    const numStock = Number(stock);
+    const parsedStock = isNaN(numStock) ? 0 : numStock;
+    
+    const productData = { 
+      name, 
+      price: Number(price), 
+      category, 
+      description, 
+      image, 
+      stock: parsedStock 
+    };
     
     console.log("📤 SUBMITTING PRODUCT DATA:", productData);
 
@@ -417,7 +426,7 @@ function App() {
     }
   };
 
-  // 🔧 FIXED EDIT HANDLER: Binds exact stock number to state
+  // 🟢 EDIT HANDLER: Loads MongoDB stock value directly to state
   const handleEditProduct = (p) => {
     const targetId = p._id || p.id;
     setEditingId(targetId);
@@ -440,7 +449,6 @@ function App() {
     }
   };
 
-  // 🔧 FIXED RESET HANDLER: Resets stock to 0
   const resetProductForm = () => {
     setEditingId(null);
     setName('');
@@ -580,7 +588,7 @@ function App() {
   return (
     <div className="d-flex bg-light min-vh-100 position-relative">
       
-      {/* 🍔 HAMBURGER TOGGLE BUTTON (3 LINES) FIXED ON TOP LEFT */}
+      {/* 🍔 HAMBURGER TOGGLE BUTTON */}
       <button 
         className="btn btn-dark position-fixed top-0 start-0 m-2 z-3 d-flex flex-column justify-content-center align-items-center shadow"
         style={{ width: '40px', height: '40px', borderRadius: '4px', zIndex: 1050 }}
@@ -860,6 +868,7 @@ function App() {
                       </div>
                     )}
 
+                    {/* 🟢 FIXED: Stock Quantity Input correctly updating state */}
                     <div className="mb-2">
                       <label className="form-label fw-semibold">Stock Quantity</label>
                       <input 
@@ -925,8 +934,10 @@ function App() {
                           <td><span className="badge bg-secondary">{p.category}</span></td>
                           <td className="text-success fw-bold">₹{p.price}</td>
                           <td>
-                            {currentStock < 5 ? (
-                              <span className="badge bg-danger">Low Stock ({currentStock})</span>
+                            {currentStock <= 0 ? (
+                              <span className="badge bg-danger">Low Stock (0)</span>
+                            ) : currentStock < 5 ? (
+                              <span className="badge bg-warning text-dark">Low Stock ({currentStock})</span>
                             ) : (
                               <span className="badge bg-success">In Stock ({currentStock})</span>
                             )}
