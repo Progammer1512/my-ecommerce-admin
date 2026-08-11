@@ -675,29 +675,30 @@ function App() {
   return (
     <div className="d-flex bg-light min-vh-100 position-relative">
       
-      {/* 🟢 TOP HEADER BAR: HAMBURGER (LEFT) & LOGOUT BUTTON (RIGHT) AT EXACT SAME LEVEL */}
+      {/* 🟢 TOP HEADER BAR: HAMBURGER (LEFT) & LOGOUT BUTTON (RIGHT) - EXACT SAME LINE ALIGNMENT */}
       <div 
         className="position-fixed top-0 start-0 w-100 d-flex justify-content-between align-items-center px-3 py-2 bg-dark shadow" 
         style={{ zIndex: 1050, height: '56px' }}
       >
-        {/* Hamburger Toggle Button (Left) */}
+        {/* 🟢 HAMBURGER BUTTON WITH CLEAR 3 LINES (NO MISSING ICONS) */}
         <button 
-          className="btn btn-outline-warning d-flex align-items-center justify-content-center border-0 p-1"
+          className="btn btn-warning d-flex flex-column justify-content-center align-items-center p-2 shadow-sm rounded-2"
           onClick={() => setSidebarOpen(!sidebarOpen)}
           title="Toggle Menu"
-          style={{ width: '40px', height: '40px' }}
+          style={{ width: '40px', height: '40px', cursor: 'pointer' }}
         >
-          <i className="bi bi-list fs-2 text-warning"></i>
+          <span className="bg-dark mb-1" style={{ width: '22px', height: '3px', borderRadius: '2px' }}></span>
+          <span className="bg-dark mb-1" style={{ width: '22px', height: '3px', borderRadius: '2px' }}></span>
+          <span className="bg-dark" style={{ width: '22px', height: '3px', borderRadius: '2px' }}></span>
         </button>
 
         <span className="fw-bold text-warning d-none d-sm-inline fs-5">TechStore Admin</span>
 
-        {/* 🟢 Logout Button (Right - Exactly aligned with Hamburger) */}
+        {/* 🟢 LOGOUT BUTTON (RIGHT) - ALIGNED WITH HAMBURGER */}
         <button 
-          className="btn btn-danger btn-sm fw-bold px-3 py-1 rounded-pill shadow-sm d-flex align-items-center gap-1"
+          className="btn btn-danger btn-sm fw-bold px-3 py-1 rounded-pill shadow-sm d-flex align-items-center"
           onClick={handleLogout}
         >
-          <i className="bi bi-box-arrow-right me-1"></i>
           <span>Logout</span>
         </button>
       </div>
