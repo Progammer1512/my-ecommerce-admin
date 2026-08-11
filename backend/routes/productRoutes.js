@@ -11,13 +11,13 @@ const {
   bulkUploadProducts
 } = require('../controllers/productController');
 
-// Product Routes
+// 🟢 FIX: /bulk-upload Route hamesha /:id se UPAR hona chahiye
+router.post('/bulk-upload', upload.single('file'), bulkUploadProducts);
+
+// Product Standard Routes
 router.get('/', getProducts);
 router.post('/', createProduct);
 router.put('/:id', updateProduct);
 router.delete('/:id', deleteProduct);
-
-// Bulk CSV Upload Route
-router.post('/bulk-upload', upload.single('file'), bulkUploadProducts);
 
 module.exports = router;
