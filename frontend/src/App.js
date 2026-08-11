@@ -675,31 +675,50 @@ function App() {
   return (
     <div className="d-flex bg-light min-vh-100 position-relative">
       
-      {/* 🍔 HAMBURGER TOGGLE BUTTON */}
-      <button 
-        className="btn btn-dark position-fixed top-0 start-0 m-2 z-3 d-flex flex-column justify-content-center align-items-center shadow"
-        style={{ width: '40px', height: '40px', borderRadius: '4px', zIndex: 1050 }}
-        onClick={() => setSidebarOpen(!sidebarOpen)}
-        title="Toggle Menu"
+      {/* 🟢 TOP HEADER BAR: HAMBURGER (LEFT) & LOGOUT BUTTON (RIGHT) AT EXACT SAME LEVEL */}
+      <div 
+        className="position-fixed top-0 start-0 w-100 d-flex justify-content-between align-items-center px-3 py-2 bg-dark shadow" 
+        style={{ zIndex: 1050, height: '56px' }}
       >
-        <span className="bg-white mb-1" style={{ width: '20px', height: '2px' }}></span>
-        <span className="bg-white mb-1" style={{ width: '20px', height: '2px' }}></span>
-        <span className="bg-white" style={{ width: '20px', height: '2px' }}></span>
-      </button>
+        {/* Hamburger Toggle Button (Left) */}
+        <button 
+          className="btn btn-outline-warning d-flex align-items-center justify-content-center border-0 p-1"
+          onClick={() => setSidebarOpen(!sidebarOpen)}
+          title="Toggle Menu"
+          style={{ width: '40px', height: '40px' }}
+        >
+          <i className="bi bi-list fs-2 text-warning"></i>
+        </button>
 
-      {/* 🟢 SIDEBAR NAVIGATION */}
+        <span className="fw-bold text-warning d-none d-sm-inline fs-5">TechStore Admin</span>
+
+        {/* 🟢 Logout Button (Right - Exactly aligned with Hamburger) */}
+        <button 
+          className="btn btn-danger btn-sm fw-bold px-3 py-1 rounded-pill shadow-sm d-flex align-items-center gap-1"
+          onClick={handleLogout}
+        >
+          <i className="bi bi-box-arrow-right me-1"></i>
+          <span>Logout</span>
+        </button>
+      </div>
+
+      {/* 🟢 SIDEBAR NAVIGATION DRAWER */}
       {sidebarOpen && (
         <div 
           className="bg-dark text-white p-3 d-flex flex-column position-fixed top-0 start-0 z-3 shadow-lg" 
-          style={{ width: '260px', minHeight: '100vh', transition: '0.3s', zIndex: 1040 }}
+          style={{ width: '260px', minHeight: '100vh', transition: '0.3s', zIndex: 1060 }}
         >
           <div className="d-flex align-items-center justify-content-between pt-2 mb-1">
-            <h4 className="text-warning fw-bold m-0">
+            <h4 className="text-warning fw-bold m-0 fs-5">
               <i className="bi bi-speedometer2 me-2"></i>TechStore Admin
             </h4>
             <button className="btn-close btn-close-white" onClick={() => setSidebarOpen(false)}></button>
           </div>
-          <small className="text-muted mb-4 px-1">Role: <span className="badge bg-info text-dark">{userRole}</span></small>
+          
+          <div className="mb-3 px-1">
+            <small className="text-muted d-block">{user.name || 'Admin User'}</small>
+            <span className="badge bg-info text-dark">{userRole}</span>
+          </div>
 
           <div className="nav flex-column nav-pills gap-2">
             {hasTabAccess(userRole, 'dashboard') && (
@@ -765,18 +784,11 @@ function App() {
               </button>
             )}
           </div>
-
-          <div className="mt-auto pt-3 border-top border-secondary">
-            <div className="d-flex align-items-center justify-content-between">
-              <span className="small fw-bold">{user.name || 'Admin'}</span>
-              <button className="btn btn-outline-danger btn-sm fw-bold" onClick={handleLogout}>Logout</button>
-            </div>
-          </div>
         </div>
       )}
 
       {/* MAIN CONTENT AREA */}
-      <div className="flex-grow-1 p-4 overflow-auto pt-5" style={{ maxHeight: '100vh', paddingLeft: '60px' }}>
+      <div className="flex-grow-1 p-3 p-md-4 overflow-auto" style={{ maxHeight: '100vh', marginTop: '56px' }}>
         
         {activeTab === 'dashboard' && hasTabAccess(userRole, 'dashboard') && (
           <div>
@@ -1128,7 +1140,7 @@ function App() {
           </div>
         )}
 
-        {/* 🟢 ORDERS & SHIPPING TAB: WIDE NON-WRAPPING RESPONSIVE TABLE WITH INLINE MIN-WIDTHS */}
+        {/* 🟢 ORDERS & SHIPPING TAB */}
         {activeTab === 'orders' && hasTabAccess(userRole, 'orders') && (
           <div>
             <div className="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
@@ -1171,7 +1183,6 @@ function App() {
               </div>
             </div>
 
-            {/* 🟢 FIXED EXPANDED TABLE WITH INLINE NO-WRAP & MIN-WIDTHS */}
             <div className="card border-0 shadow-sm p-3 bg-white">
               <div className="table-responsive">
                 <table className="table table-bordered table-hover align-middle m-0">
