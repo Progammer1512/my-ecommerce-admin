@@ -369,30 +369,63 @@ function App() {
     setShowCustomCategory(false);
   };
 
+  // 🟢 CSV PARSER & DIRECT MONGO DB UPLOAD HANDLER (Bypasses missing backend route)
   const handleCsvUpload = async (e) => {
     e.preventDefault();
     if (!csvFile) return alert('Please select a CSV file first!');
 
-    const formData = new FormData();
-    formData.append('file', csvFile);
+    const reader = new FileReader();
+    reader.onload = async (evt) => {
+      const text = evt.target.result;
+      const lines = text.split('\n').filter(line => line.trim() !== '');
+      if (lines.length <= 1) return alert('CSV file is empty or missing data rows!');
 
-    try {
-      const token = localStorage.getItem('adminToken');
-      const res = await axios.post(`${BASE_URL}/api/products/bulk-upload`, formData, {
-        headers: { 
-          'Content-Type': 'multipart/form-data',
-          ...(token ? { Authorization: `Bearer ${token}` } : {})
-        }
-      });
-      alert(res.data.message);
-      fetchData();
-      setCsvFile(null);
-    } catch (error) {
-      alert('Bulk upload failed: ' + (error.response?.data?.message || error.message));
-    }
+      const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
+      const nameIdx = headers.indexOf('name');
+      const priceIdx = headers.indexOf('price');
+      const categoryIdx = headers.indexOf('category');
+      const descriptionIdx = headers.indexOf('description');
+      const imageIdx = headers.indexOf('image');
+      const stockIdx = headers.indexOf('stock');
+
+      if (nameIdx === -1 || priceIdx === -1) {
+        return alert('CSV Headers Required: name, price, category, description, image, stock');
+      }
+
+      const rows = lines.slice(1);
+      const authConfig = getAuthHeader();
+
+      try {
+        const uploadPromises = rows.map((rowText) => {
+          const cols = rowText.split(',').map(c => c.trim().replace(/^"|"$/g, ''));
+          const rowStock = stockIdx !== -1 ? cols[stockIdx] : 0;
+          const parsedStock = (rowStock !== undefined && rowStock !== '' && !isNaN(Number(rowStock))) ? Number(rowStock) : 0;
+
+          const productPayload = {
+            name: cols[nameIdx] || 'Imported Item',
+            price: Number(cols[priceIdx]) || 0,
+            category: categoryIdx !== -1 && cols[categoryIdx] ? cols[categoryIdx] : 'General',
+            description: descriptionIdx !== -1 && cols[descriptionIdx] ? cols[descriptionIdx] : 'Imported store item',
+            image: imageIdx !== -1 && cols[imageIdx] ? cols[imageIdx] : 'https://via.placeholder.com/150',
+            stock: parsedStock
+          };
+
+          return axios.post(`${BASE_URL}/api/products`, productPayload, authConfig);
+        });
+
+        await Promise.all(uploadPromises);
+        alert(`🎉 Successfully uploaded ${rows.length} products to MongoDB!`);
+        setCsvFile(null);
+        fetchData();
+      } catch (error) {
+        console.error('CSV Import Error:', error);
+        alert('Upload Error: ' + (error.response?.data?.message || error.message));
+      }
+    };
+    reader.readAsText(csvFile);
   };
 
-  // 🟢 FIXED BULK DELETE LOGIC: Uses existing working single-delete API endpoint in parallel
+  // 🔴 BULK DELETE HANDLER (Parallelized calls using active endpoints)
   const handleBulkDeleteProducts = async (deleteAll = false) => {
     const targets = deleteAll ? products.map(p => p._id || p.id) : selectedProductIds;
     
@@ -406,7 +439,6 @@ function App() {
 
     try {
       const authConfig = getAuthHeader();
-      // Execute all single delete API calls in parallel
       await Promise.all(
         targets.map(id => axios.delete(`${BASE_URL}/api/products/${id}`, authConfig))
       );
