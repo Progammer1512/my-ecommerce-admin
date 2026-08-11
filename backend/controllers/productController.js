@@ -2,6 +2,14 @@ const Product = require('../models/Product');
 const fs = require('fs');
 const csv = require('csv-parser');
 
+// Helper Function: String/Number ko clean karke Sahi Number mein convert karta hai (\r aur spaces saaf karke)
+const parseCleanStock = (val) => {
+  if (val === undefined || val === null || val === '') return 0;
+  const cleanStr = String(val).replace(/[^0-9]/g, '');
+  const num = parseInt(cleanStr, 10);
+  return isNaN(num) ? 0 : num;
+};
+
 // 1. Get All Products
 exports.getProducts = async (req, res) => {
   try {
@@ -16,16 +24,17 @@ exports.getProducts = async (req, res) => {
 exports.createProduct = async (req, res) => {
   try {
     const { name, price, category, description, image, stock } = req.body;
-    const finalStock = (stock !== undefined && stock !== null && stock !== '' && !isNaN(Number(stock))) ? Number(stock) : 0;
+    const finalStock = parseCleanStock(stock);
 
     const product = new Product({
       name,
-      price: Number(price),
-      category,
-      description,
-      image,
+      price: Number(price) || 0,
+      category: category || 'General',
+      description: description || '',
+      image: image || 'https://via.placeholder.com/150',
       stock: finalStock
     });
+
     const savedProduct = await product.save();
     res.status(201).json(savedProduct);
   } catch (error) {
@@ -33,7 +42,7 @@ exports.createProduct = async (req, res) => {
   }
 };
 
-// 3. Update Product (Strict Stock Number Binding)
+// 3. Update Product (Strict Dynamic Stock Sync)
 exports.updateProduct = async (req, res) => {
   try {
     const { name, price, category, description, image, stock } = req.body;
@@ -41,15 +50,14 @@ exports.updateProduct = async (req, res) => {
 
     if (product) {
       if (name !== undefined) product.name = name;
-      if (price !== undefined) product.price = Number(price);
+      if (price !== undefined) product.price = Number(price) || 0;
       if (category !== undefined) product.category = category;
       if (description !== undefined) product.description = description;
       if (image !== undefined) product.image = image;
       
-      // 🟢 STRICT FIX: Always convert updated stock to Number
+      // 🟢 STRICT FIX: Always parse & sanitize stock number
       if (stock !== undefined && stock !== null && stock !== '') {
-        const parsedStock = Number(stock);
-        product.stock = isNaN(parsedStock) ? 0 : parsedStock;
+        product.stock = parseCleanStock(stock);
       }
 
       const updatedProduct = await product.save();
@@ -100,13 +108,20 @@ exports.bulkUploadProducts = async (req, res) => {
   fs.createReadStream(filePath)
     .pipe(csv())
     .on('data', (row) => {
-      const parsedStock = (row.stock !== undefined && row.stock !== '' && !isNaN(Number(row.stock))) ? Number(row.stock) : 0;
+      // Clean keys and values to avoid hidden \r or special spaces
+      const cleanRow = {};
+      Object.keys(row).forEach((key) => {
+        cleanRow[key.trim().toLowerCase()] = row[key];
+      });
+
+      const parsedStock = parseCleanStock(cleanRow.stock);
+
       products.push({
-        name: row.name,
-        price: Number(row.price) || 0,
-        category: row.category || 'General',
-        description: row.description || '',
-        image: row.image || 'https://via.placeholder.com/150',
+        name: cleanRow.name || 'Imported Item',
+        price: Number(cleanRow.price) || 0,
+        category: cleanRow.category || 'General',
+        description: cleanRow.description || '',
+        image: cleanRow.image || 'https://via.placeholder.com/150',
         stock: parsedStock
       });
     })
@@ -115,7 +130,7 @@ exports.bulkUploadProducts = async (req, res) => {
         await Product.insertMany(products);
         if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
         res.status(201).json({ 
-          message: `🎉 Successfully imported ${products.length} products!`,
+          message: `🎉 Successfully imported ${products.length} products to Database!`,
           count: products.length 
         });
       } catch (error) {
