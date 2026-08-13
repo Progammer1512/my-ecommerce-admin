@@ -1,10 +1,10 @@
 const express = require('express');
 const router = express.Router();
 const jwt = require('jsonwebtoken');
-// 🟢 IMPORT AdminUser MODEL INSTEAD OF User
+// 🟢 IMPORT STRICTLY AdminUser MODEL FROM User.js
 const { AdminUser } = require('../models/User'); 
 
-// 1. SIGNUP ROUTE (Database mein naya admin/staff register karne ke liye - Secured with Secret Code)
+// 1. SIGNUP ROUTE (Saves ONLY into adminusers Collection)
 router.post('/signup', async (req, res) => {
   try {
     const { name, email, password, role, secretCode } = req.body;
@@ -21,7 +21,7 @@ router.post('/signup', async (req, res) => {
 
     const cleanEmail = email.trim().toLowerCase();
     
-    // Check if admin user already exists in AdminUser collection
+    // Check if admin user already exists in adminusers collection
     const existingUser = await AdminUser.findOne({ email: cleanEmail });
     if (existingUser) {
       return res.status(400).json({ message: 'Admin user already exists with this email!' });
@@ -35,7 +35,7 @@ router.post('/signup', async (req, res) => {
     else if (assignedRole.toLowerCase() === 'superadmin') assignedRole = 'SuperAdmin';
     else assignedRole = 'Admin';
 
-    // 🟢 SAVE NEW ADMIN TO AdminUser COLLECTION (Dedicated Admin Table)
+    // 🟢 SAVE NEW ADMIN EXCLUSIVELY TO adminusers COLLECTION
     const newUser = new AdminUser({
       name: name.trim(),
       email: cleanEmail,
@@ -45,8 +45,10 @@ router.post('/signup', async (req, res) => {
 
     await newUser.save();
 
+    console.log(`✅ New Admin Registered in adminusers collection: ${cleanEmail}`);
+
     return res.status(201).json({ 
-      message: 'Admin/Staff registered successfully!', 
+      message: 'Admin/Staff registered successfully in Admin database!', 
       user: {
         id: newUser._id,
         name: newUser.name,
@@ -55,11 +57,12 @@ router.post('/signup', async (req, res) => {
       }
     });
   } catch (error) {
+    console.error('Admin Signup Error:', error);
     return res.status(500).json({ message: 'Signup error: ' + error.message });
   }
 });
 
-// 2. LOGIN ROUTE (Verify from AdminUser collection)
+// 2. LOGIN ROUTE (Fetches ONLY from adminusers Collection)
 router.post('/login', async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -71,7 +74,7 @@ router.post('/login', async (req, res) => {
     const cleanEmail = email.trim().toLowerCase();
     const cleanPassword = password.trim();
 
-    // 🟢 FIND USER IN AdminUser COLLECTION
+    // 🟢 FIND USER ONLY IN adminusers COLLECTION
     const user = await AdminUser.findOne({ email: cleanEmail });
     if (!user) {
       return res.status(401).json({ message: 'Invalid email or password' });
@@ -92,6 +95,8 @@ router.post('/login', async (req, res) => {
       { expiresIn: '30d' }
     );
 
+    console.log(`🔓 Admin Logged In from adminusers collection: ${cleanEmail}`);
+
     return res.json({
       _id: user._id,
       name: user.name,
@@ -100,6 +105,7 @@ router.post('/login', async (req, res) => {
       token
     });
   } catch (error) {
+    console.error('Admin Login Error:', error);
     return res.status(500).json({ message: 'Login error: ' + error.message });
   }
 });
