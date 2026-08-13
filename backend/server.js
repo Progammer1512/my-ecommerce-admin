@@ -270,7 +270,7 @@ app.delete('/api/coupons/:id', async (req, res) => {
   }
 });
 
-// DIRECT ADMIN USERS MANAGEMENT API ENDPOINTS
+// 🟢 DIRECT ADMIN USERS MANAGEMENT API ENDPOINTS (Dedicated adminusers table)
 app.get('/api/auth/admin-users', async (req, res) => {
   try {
     const admins = await AdminUser.find({}).sort({ createdAt: -1 });
@@ -341,38 +341,35 @@ app.delete('/api/auth/admin-users/:id', async (req, res) => {
   }
 });
 
-// 🟢 BULLET-PROOF DIRECT SIGNUP ROUTE (Pushes directly to adminusers table without redirection)
+// 🟢 REPLACED OLD SIGNUP ROUTE: Redirects signup requests directly to adminusers collection
 app.post('/api/auth/signup', async (req, res) => {
   try {
-    const { name, email, password, role, secretCode } = req.body;
-
+    const { name, email, password, role, mobile } = req.body;
     if (!name || !email || !password) {
       return res.status(400).json({ message: 'Name, email, and password are required' });
     }
 
     const cleanEmail = email.trim().toLowerCase();
-    
-    // Check exclusively in adminusers collection
-    const existingAdmin = await AdminUser.findOne({ email: cleanEmail });
-    if (existingAdmin) {
-      return res.status(400).json({ message: 'Admin user already exists with this email!' });
+    const existing = await AdminUser.findOne({ email: cleanEmail });
+    if (existing) {
+      return res.status(400).json({ message: 'Admin user with this email already exists!' });
     }
 
     let assignedRole = role ? role.trim() : 'SuperAdmin';
 
-    // Directly push to AdminUser model (which points strictly to 'adminusers' collection)
     const newAdmin = new AdminUser({
       name: name.trim(),
       email: cleanEmail,
       password: password.trim(),
-      role: assignedRole
+      role: assignedRole,
+      mobile: mobile || ''
     });
 
     await newAdmin.save();
-    console.log(`✅ DIRECT SUCCESS: Admin pushed strictly to 'adminusers' collection -> ${cleanEmail}`);
+    console.log(`✅ SUCCESS: Signup routed directly to 'adminusers' collection -> ${cleanEmail}`);
 
     return res.status(201).json({ 
-      message: 'Admin registered successfully in adminusers table!', 
+      message: 'Admin registered successfully in adminusers collection!', 
       user: {
         id: newAdmin._id,
         name: newAdmin.name,
@@ -381,15 +378,15 @@ app.post('/api/auth/signup', async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('Direct Signup Error:', error);
-    return res.status(500).json({ message: 'Server error: ' + error.message });
+    console.error('Signup Error:', error);
+    return res.status(500).json({ message: 'Server signup error: ' + error.message });
   }
 });
 
 // ROUTER MIDDLEWARES
 app.use('/api/products', require('./routes/productRoutes'));
 app.use('/api/orders', require('./routes/orderRoutes'));
-app.use('/api/auth', require('./routes/authRoutes'));
+// Note: authRoutes signup is fully bypassed and handled above to prevent any users table leaks!
 
 // Root Healthcheck Route
 app.get('/', (req, res) => {
