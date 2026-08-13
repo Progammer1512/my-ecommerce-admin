@@ -386,7 +386,7 @@ app.post('/api/auth/signup', async (req, res) => {
 // ROUTER MIDDLEWARES (Mounted properly to resolve 404 error)
 app.use('/api/products', require('./routes/productRoutes'));
 app.use('/api/orders', require('./routes/orderRoutes'));
-app.use('/api/auth', require('./routes/authRoutes')); // 🟢 THIS WAS MISSING OR UNMOUNTED CAUSING 404 ERROR
+app.use('/api/auth', require('./routes/authRoutes'));
 
 // Root Healthcheck Route
 app.get('/', (req, res) => {
