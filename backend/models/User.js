@@ -1,6 +1,6 @@
 const mongoose = require('mongoose');
 
-// 1. CUSTOMER SCHEMA (Shoppers wali website ke users ke liye)
+// 1. CUSTOMER SCHEMA (Shoppers wali website ke users ke liye -> 'users' collection)
 const userSchema = new mongoose.Schema({
   name: { 
     type: String, 
@@ -23,9 +23,9 @@ const userSchema = new mongoose.Schema({
     enum: ['Customer', 'customer'], 
     default: 'Customer' 
   }
-}, { timestamps: true });
+}, { collection: 'users', timestamps: true });
 
-// 2. ADMIN USER SCHEMA (Admin portal ke admins, managers & staff ke liye -> adminusers collection)
+// 2. ADMIN USER SCHEMA (Admin portal ke admins, managers & staff ke liye -> 'adminusers' collection)
 const adminUserSchema = new mongoose.Schema({
   name: { 
     type: String, 
@@ -55,7 +55,7 @@ const adminUserSchema = new mongoose.Schema({
     type: String, 
     default: '' 
   }
-}, { timestamps: true });
+}, { collection: 'adminusers', timestamps: true }); // 🟢 Forced to point strictly to 'adminusers'
 
 // Export both models correctly
 const User = mongoose.model('User', userSchema);
