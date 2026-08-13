@@ -16,7 +16,7 @@ const app = express();
 // Connect Database
 connectDB();
 
-// 1. TOP PRIORITY: CORS CONFIGURATION
+// 1. TOP PRIORITY: CORS CONFIGURATION (Enables cross-origin requests from Vercel)
 app.use(cors());
 
 // 2. EXPRESS BODY PARSERS
