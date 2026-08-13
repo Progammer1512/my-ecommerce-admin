@@ -9,6 +9,9 @@ const Review = require('./models/reviewModel');
 const Coupon = require('./models/couponModel');
 const Product = require('./models/Product');
 
+// 🟢 IMPORT AdminUser MODEL FOR DEDICATED ADMIN MANAGEMENT
+const { AdminUser } = require('./models/User');
+
 // ROLE BASED ACCESS CONTROL MIDDLEWARE IMPORT
 const { protect, authorizeRoles } = require('./middleware/authMiddleware');
 
@@ -264,6 +267,77 @@ app.delete('/api/coupons/:id', async (req, res) => {
     return res.status(200).json({ message: 'Coupon deleted', coupons: allCoupons });
   } catch (error) {
     return res.status(500).json({ message: 'Delete coupon failed' });
+  }
+});
+
+// 🟢 DIRECT ADMIN USERS MANAGEMENT API ENDPOINTS (Dedicated adminusers table)
+app.get('/api/auth/admin-users', async (req, res) => {
+  try {
+    const admins = await AdminUser.find({}).sort({ createdAt: -1 });
+    return res.status(200).json(admins);
+  } catch (error) {
+    return res.status(500).json({ message: 'Failed to fetch admin users' });
+  }
+});
+
+app.post('/api/auth/admin-users', async (req, res) => {
+  try {
+    const { name, email, password, role, mobile } = req.body;
+    if (!name || !email || !password) {
+      return res.status(400).json({ message: 'Name, email and password are required' });
+    }
+
+    const cleanEmail = email.trim().toLowerCase();
+    const existing = await AdminUser.findOne({ email: cleanEmail });
+    if (existing) {
+      return res.status(400).json({ message: 'Admin user with this email already exists!' });
+    }
+
+    const newAdmin = new AdminUser({
+      name: name.trim(),
+      email: cleanEmail,
+      password: password.trim(),
+      role: role || 'Admin',
+      mobile: mobile || ''
+    });
+
+    await newAdmin.save();
+    const updatedAdmins = await AdminUser.find({}).sort({ createdAt: -1 });
+    return res.status(201).json({ message: 'Admin created successfully', admins: updatedAdmins });
+  } catch (error) {
+    return res.status(500).json({ message: 'Failed to create admin user: ' + error.message });
+  }
+});
+
+app.put('/api/auth/admin-users/:id', async (req, res) => {
+  try {
+    const { name, email, password, role, mobile } = req.body;
+    const admin = await AdminUser.findById(req.params.id);
+    if (!admin) {
+      return res.status(404).json({ message: 'Admin user not found' });
+    }
+
+    if (name) admin.name = name.trim();
+    if (email) admin.email = email.trim().toLowerCase();
+    if (password && password.trim() !== '') admin.password = password.trim();
+    if (role) admin.role = role;
+    if (mobile !== undefined) admin.mobile = mobile;
+
+    await admin.save();
+    const updatedAdmins = await AdminUser.find({}).sort({ createdAt: -1 });
+    return res.status(200).json({ message: 'Admin updated successfully', admins: updatedAdmins });
+  } catch (error) {
+    return res.status(500).json({ message: 'Failed to update admin user: ' + error.message });
+  }
+});
+
+app.delete('/api/auth/admin-users/:id', async (req, res) => {
+  try {
+    await AdminUser.findByIdAndDelete(req.params.id);
+    const updatedAdmins = await AdminUser.find({}).sort({ createdAt: -1 });
+    return res.status(200).json({ message: 'Admin deleted successfully', admins: updatedAdmins });
+  } catch (error) {
+    return res.status(500).json({ message: 'Failed to delete admin user' });
   }
 });
 
