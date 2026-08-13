@@ -47,10 +47,18 @@ function App() {
   const [orders, setOrders] = useState([]);
   const [banners, setBanners] = useState([]);
   const [reviews, setReviews] = useState([]);
+  const [customersList, setCustomersList] = useState([]);
   const [csvFile, setCsvFile] = useState(null);
 
   const [orderSearchTerm, setOrderSearchTerm] = useState('');
   const [orderStatusFilter, setOrderStatusFilter] = useState('ALL');
+
+  // CUSTOMERS TAB FILTER STATE
+  const [customerFilter, setCustomerFilter] = useState('ALL'); // ALL, CART, WISHLIST
+  const [selectedTargetCustomer, setSelectedTargetCustomer] = useState(null);
+  const [showPersonalDiscountModal, setShowPersonalDiscountModal] = useState(false);
+  const [personalCouponCode, setPersonalCouponCode] = useState('');
+  const [personalCouponDiscount, setPersonalCouponDiscount] = useState('20');
 
   const [categories, setCategories] = useState(['Electronics', 'Footwear', 'Accessories', 'Fashion']);
   const [showCustomCategory, setShowCustomCategory] = useState(false);
@@ -238,6 +246,16 @@ function App() {
       if (Array.isArray(couponRes.data)) {
         setCoupons(couponRes.data);
       }
+
+      // FETCH CUSTOMERS WITH CART & WISHLIST TRACKING
+      try {
+        const custRes = await axios.get(`${BASE_URL}/api/auth/customers`, authConfig);
+        if (Array.isArray(custRes.data)) {
+          setCustomersList(custRes.data);
+        }
+      } catch (e) {
+        console.log("Customer fetch fallback");
+      }
     } catch (error) {
       console.error('Error fetching admin data:', error);
     }
@@ -283,6 +301,17 @@ function App() {
     }
 
     return statusMatch && searchMatch;
+  });
+
+  // FILTERED CUSTOMERS LIST (ABANDONED CART / WISHLIST)
+  const filteredCustomers = customersList.filter(cust => {
+    if (customerFilter === 'CART') {
+      return cust.cart && cust.cart.length > 0;
+    }
+    if (customerFilter === 'WISHLIST') {
+      return cust.wishlist && cust.wishlist.length > 0;
+    }
+    return true;
   });
 
   const chartData = [
@@ -383,7 +412,6 @@ function App() {
     setShowCustomCategory(false);
   };
 
-  // 🟢 FIXED CSV UPLOAD PARSER WITH FALLBACK FOR REQUIRED FIELDS
   const handleCsvUpload = (e) => {
     e.preventDefault();
     if (!csvFile) return alert('Please select a CSV file first!');
@@ -411,7 +439,6 @@ function App() {
             const rawPrice = parseCleanStock(cleanRow.price);
             const rawCategory = cleanRow.category || 'General';
             
-            // 🟢 FALLBACK: Ensure description is NEVER empty to prevent Mongo validation error!
             const rawDesc = (cleanRow.description && String(cleanRow.description).trim().length > 0) 
               ? String(cleanRow.description).trim() 
               : `High quality verified ${rawCategory} product.`;
@@ -598,6 +625,34 @@ function App() {
     setNewCouponMaxUsage(50);
   };
 
+  // 🟢 CREATE PERSONAL EXTRA DISCOUNT COUPON FOR SPECIFIC TARGET CUSTOMER
+  const handleCreatePersonalDiscount = async (e) => {
+    e.preventDefault();
+    if (!selectedTargetCustomer || !personalCouponCode || !personalCouponDiscount) {
+      alert("Coupon Code and Discount % are required!");
+      return;
+    }
+
+    const personalCouponPayload = {
+      code: personalCouponCode.toUpperCase().trim(),
+      discount: Number(personalCouponDiscount),
+      category: 'All',
+      maxUsage: 1, // Only for 1 time usage
+      status: 'Active',
+      targetUserEmail: selectedTargetCustomer.email.toLowerCase().trim() // 🎯 TARGETS THIS SPECIFIC USER ONLY
+    };
+
+    try {
+      await axios.post(`${BASE_URL}/api/coupons`, personalCouponPayload, getAuthHeader());
+      alert(`🎁 Exclusive ${personalCouponDiscount}% Discount Coupon '${personalCouponPayload.code}' generated specifically for ${selectedTargetCustomer.name} (${selectedTargetCustomer.email})!`);
+      setShowPersonalDiscountModal(false);
+      setPersonalCouponCode('');
+      fetchData();
+    } catch (err) {
+      alert('Failed to issue discount: ' + (err.response?.data?.message || err.message));
+    }
+  };
+
   const handleDeleteCoupon = async (id) => {
     if (window.confirm('Delete this coupon code?')) {
       try {
@@ -680,7 +735,7 @@ function App() {
   return (
     <div className="d-flex bg-light min-vh-100 position-relative">
       
-      {/* 🟢 TOP HEADER BAR: HAMBURGER (LEFT) & LOGOUT BUTTON (RIGHT) */}
+      {/* TOP HEADER BAR */}
       <div 
         className="position-fixed top-0 start-0 w-100 d-flex justify-content-between align-items-center px-3 py-2 bg-dark shadow" 
         style={{ zIndex: 1050, height: '56px' }}
@@ -706,7 +761,7 @@ function App() {
         </button>
       </div>
 
-      {/* 🟢 SIDEBAR NAVIGATION DRAWER */}
+      {/* SIDEBAR NAVIGATION DRAWER */}
       {sidebarOpen && (
         <div 
           className="bg-dark text-white p-3 d-flex flex-column position-fixed top-0 start-0 z-3 shadow-lg" 
@@ -787,6 +842,14 @@ function App() {
                 <i className="bi bi-ticket-perforated me-2"></i>Marketing & Coupons ({coupons.length})
               </button>
             )}
+
+            {/* 🟢 NEW CUSTOMERS & WISHLIST INTELLIGENCE TAB */}
+            <button 
+              className={`nav-link text-start fw-bold ${activeTab === 'customers' ? 'active bg-warning text-dark' : 'text-white'}`} 
+              onClick={() => handleTabSelect('customers')}
+            >
+              <i className="bi bi-people-fill me-2"></i>👥 Customers & Wishlist ({customersList.length})
+            </button>
           </div>
         </div>
       )}
@@ -861,6 +924,153 @@ function App() {
           </div>
         )}
 
+        {/* 🟢 NEW CUSTOMERS INTELLIGENCE TAB (SORT BY ABANDONED CART / WISHLIST) */}
+        {activeTab === 'customers' && (
+          <div>
+            <div className="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+              <h3 className="fw-bold m-0">👥 Customer Intelligence & Abandoned Recovery</h3>
+              
+              <div className="d-flex align-items-center gap-2">
+                <select 
+                  className="form-select form-select-sm fw-bold border-warning text-dark"
+                  value={customerFilter}
+                  onChange={(e) => setCustomerFilter(e.target.value)}
+                  style={{ width: '250px' }}
+                >
+                  <option value="ALL">🌟 All Registered Customers ({customersList.length})</option>
+                  <option value="CART">🛒 Abandoned Cart Customers Only</option>
+                  <option value="WISHLIST">❤️ Wishlist Left Customers Only</option>
+                </select>
+
+                <button className="btn btn-outline-primary btn-sm fw-bold" onClick={fetchData}>
+                  <i className="bi bi-arrow-clockwise me-1"></i> Sync Customers
+                </button>
+              </div>
+            </div>
+
+            <div className="card border-0 shadow-sm p-3 bg-white">
+              <div className="table-responsive">
+                <table className="table table-bordered table-hover align-middle m-0">
+                  <thead className="table-dark text-nowrap">
+                    <tr>
+                      <th style={{ minWidth: '180px' }}>Customer Name</th>
+                      <th style={{ minWidth: '220px' }}>Email & Mobile</th>
+                      <th style={{ minWidth: '200px' }}>🛒 Cart Left Items</th>
+                      <th style={{ minWidth: '200px' }}>❤️ Wishlist Saved Items</th>
+                      <th style={{ minWidth: '180px' }}>Action & Recovery</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredCustomers.length === 0 ? (
+                      <tr>
+                        <td colSpan="5" className="text-center py-5 text-muted">
+                          <i className="bi bi-people fs-2 d-block mb-2 text-secondary"></i>
+                          <h5>No customers found matching this filter.</h5>
+                        </td>
+                      </tr>
+                    ) : (
+                      filteredCustomers.map((cust) => (
+                        <tr key={cust._id || cust.email}>
+                          <td className="fw-bold text-dark">{cust.name}</td>
+                          <td>
+                            <span className="fw-semibold text-primary d-block">{cust.email}</span>
+                            <small className="text-muted">{cust.mobile || 'No Mobile Registered'}</small>
+                          </td>
+                          <td>
+                            {cust.cart && cust.cart.length > 0 ? (
+                              <div>
+                                <span className="badge bg-warning text-dark mb-1">{cust.cart.length} Products in Cart</span>
+                                <div className="small text-truncate" style={{ maxWidth: '200px' }}>
+                                  {cust.cart.map(i => i.name).join(', ')}
+                                </div>
+                              </div>
+                            ) : <span className="text-muted small">Empty Cart</span>}
+                          </td>
+                          <td>
+                            {cust.wishlist && cust.wishlist.length > 0 ? (
+                              <div>
+                                <span className="badge bg-danger mb-1">{cust.wishlist.length} Products Wishlisted</span>
+                                <div className="small text-truncate" style={{ maxWidth: '200px' }}>
+                                  {cust.wishlist.map(i => i.name).join(', ')}
+                                </div>
+                              </div>
+                            ) : <span className="text-muted small">No Wishlist</span>}
+                          </td>
+                          <td>
+                            <button 
+                              className="btn btn-sm btn-success fw-bold px-3 py-1 shadow-sm"
+                              onClick={() => {
+                                setSelectedTargetCustomer(cust);
+                                setPersonalCouponCode(`OFFER_${cust.name ? cust.name.split(' ')[0].toUpperCase() : 'USER'}_${Math.floor(100 + Math.random() * 900)}`);
+                                setShowPersonalDiscountModal(true);
+                              }}
+                            >
+                              🎁 Offer Extra Discount
+                            </button>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 🟢 EXCLUSIVE PERSONAL DISCOUNT ISSUANCE MODAL */}
+        {showPersonalDiscountModal && selectedTargetCustomer && (
+          <div className="modal show d-block bg-dark bg-opacity-50" tabIndex="-1" style={{ zIndex: 1070 }}>
+            <div className="modal-dialog modal-dialog-centered">
+              <div className="modal-content border-0 shadow-lg p-3 p-md-4 rounded-4">
+                <div className="d-flex justify-content-between align-items-center border-bottom pb-2 mb-3">
+                  <h5 className="fw-bold mb-0 text-success"><i className="bi bi-gift-fill me-2"></i>Issue Exclusive Extra Discount</h5>
+                  <button type="button" className="btn-close" onClick={() => setShowPersonalDiscountModal(false)}></button>
+                </div>
+
+                <div className="p-3 bg-light rounded border mb-3">
+                  <span className="fw-bold text-dark d-block">Target Customer: {selectedTargetCustomer.name}</span>
+                  <small className="text-muted d-block">{selectedTargetCustomer.email}</small>
+                  <small className="text-primary fw-bold d-block mt-1">
+                    🎯 Coupon will ONLY be visible & usable by this customer!
+                  </small>
+                </div>
+
+                <form onSubmit={handleCreatePersonalDiscount}>
+                  <div className="mb-3">
+                    <label className="form-label fw-bold small">Exclusive Coupon Code</label>
+                    <input 
+                      type="text" 
+                      className="form-control fw-bold text-uppercase text-primary" 
+                      required 
+                      value={personalCouponCode} 
+                      onChange={(e) => setPersonalCouponCode(e.target.value)} 
+                    />
+                  </div>
+                  <div className="mb-3">
+                    <label className="form-label fw-bold small">Discount Percentage (%)</label>
+                    <input 
+                      type="number" 
+                      className="form-control fw-bold" 
+                      required 
+                      min="1" 
+                      max="90" 
+                      value={personalCouponDiscount} 
+                      onChange={(e) => setPersonalCouponDiscount(e.target.value)} 
+                    />
+                  </div>
+
+                  <div className="d-flex justify-content-end gap-2 pt-2 border-top">
+                    <button type="button" className="btn btn-outline-secondary" onClick={() => setShowPersonalDiscountModal(false)}>Cancel</button>
+                    <button type="submit" className="btn btn-success fw-bold px-4">Issue Discount Coupon</button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* BANNERS TAB */}
         {activeTab === 'banners' && hasTabAccess(userRole, 'banners') && (
           <div>
             <h3 className="fw-bold mb-4">Customer Website Hero Banner Manager</h3>
@@ -1278,6 +1488,7 @@ function App() {
           </div>
         )}
 
+        {/* RETURNS TAB */}
         {activeTab === 'returns' && hasTabAccess(userRole, 'returns') && (
           <div>
             <div className="d-flex justify-content-between align-items-center mb-4">
@@ -1362,6 +1573,7 @@ function App() {
           </div>
         )}
 
+        {/* REVIEWS TAB */}
         {activeTab === 'reviews' && hasTabAccess(userRole, 'reviews') && (
           <div>
             <div className="d-flex justify-content-between align-items-center mb-4">
@@ -1415,6 +1627,7 @@ function App() {
           </div>
         )}
 
+        {/* COUPONS TAB */}
         {activeTab === 'coupons' && hasTabAccess(userRole, 'coupons') && (
           <div>
             <h3 className="fw-bold mb-4">Marketing & Discount Coupon Engine</h3>
@@ -1475,7 +1688,7 @@ function App() {
                           <th>Category</th>
                           <th>Discount</th>
                           <th>Redemption Usage</th>
-                          <th>Status</th>
+                          <th>Target User</th>
                           <th>Action</th>
                         </tr>
                       </thead>
@@ -1497,11 +1710,9 @@ function App() {
                               </span>
                             </td>
                             <td>
-                              {(c.usedCount || 0) >= (c.maxUsage || 100) ? (
-                                <span className="badge bg-danger">Exhausted</span>
-                              ) : (
-                                <span className="badge bg-success">{c.status || 'Active'}</span>
-                              )}
+                              {c.targetUserEmail ? (
+                                <span className="badge bg-warning text-dark fw-bold">🎯 {c.targetUserEmail}</span>
+                              ) : <span className="badge bg-secondary">Global (All Users)</span>}
                             </td>
                             <td>
                               <button className="btn btn-sm btn-outline-danger fw-bold" onClick={() => handleDeleteCoupon(couponId)}>
