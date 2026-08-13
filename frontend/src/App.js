@@ -30,12 +30,13 @@ function App() {
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
   
-  // SIGNUP STATES
+  // SIGNUP STATES (Updated with Mobile Number to match internal admin creator)
   const [isSignup, setIsSignup] = useState(false);
   const [signupName, setSignupName] = useState('');
   const [signupEmail, setSignupEmail] = useState('');
   const [signupPassword, setSignupPassword] = useState('');
-  const [signupRole, setSignupRole] = useState('InventoryManager');
+  const [signupRole, setSignupRole] = useState('Admin');
+  const [signupMobile, setSignupMobile] = useState('');
   const [signupSecretCode, setSignupSecretCode] = useState('');
 
   // SIDEBAR TOGGLE STATE
@@ -199,6 +200,7 @@ function App() {
         email: signupEmail,
         password: signupPassword,
         role: signupRole,
+        mobile: signupMobile,
         secretCode: signupSecretCode
       });
 
@@ -208,6 +210,7 @@ function App() {
       setSignupName('');
       setSignupEmail('');
       setSignupPassword('');
+      setSignupMobile('');
       setSignupSecretCode('');
     } catch (error) {
       console.error('Signup Error:', error);
@@ -749,26 +752,30 @@ function App() {
           ) : (
             <form onSubmit={handleSignup}>
               <div className="mb-2">
-                <label className="form-label fw-bold">Full Name</label>
-                <input type="text" className="form-control" required value={signupName} onChange={(e) => setSignupName(e.target.value)} placeholder="John Doe" />
+                <label className="form-label fw-bold small">Full Name</label>
+                <input type="text" className="form-control" required value={signupName} onChange={(e) => setSignupName(e.target.value)} placeholder="John Manager" />
               </div>
               <div className="mb-2">
-                <label className="form-label fw-bold">Email Address</label>
-                <input type="email" className="form-control" required value={signupEmail} onChange={(e) => setSignupEmail(e.target.value)} placeholder="admin@techstore.com" />
+                <label className="form-label fw-bold small">Email ID</label>
+                <input type="email" className="form-control" required value={signupEmail} onChange={(e) => setSignupEmail(e.target.value)} placeholder="manager@techstore.com" />
               </div>
               <div className="mb-2">
-                <label className="form-label fw-bold">Password</label>
+                <label className="form-label fw-bold small">Password</label>
                 <input type="password" className="form-control" required value={signupPassword} onChange={(e) => setSignupPassword(e.target.value)} placeholder="••••••••" />
               </div>
-              <div className="mb-3">
-                <label className="form-label fw-bold">Select Role</label>
+              <div className="mb-2">
+                <label className="form-label fw-bold small">Role / Permission</label>
                 <select className="form-select fw-bold text-primary" value={signupRole} onChange={(e) => setSignupRole(e.target.value)}>
-                  <option value="SuperAdmin">SuperAdmin</option>
-                  <option value="InventoryManager">InventoryManager</option>
-                  <option value="Staff">Support Staff</option>
+                  <option value="SuperAdmin">SuperAdmin (Full Access)</option>
+                  <option value="InventoryManager">InventoryManager (Products & Stock)</option>
+                  <option value="Staff">Support Staff (Orders & Reviews)</option>
                 </select>
               </div>
-              <button type="submit" className="btn btn-success w-100 fw-bold py-2 mb-3">Register New Account</button>
+              <div className="mb-3">
+                <label className="form-label fw-bold small">Mobile Number</label>
+                <input type="tel" className="form-control" value={signupMobile} onChange={(e) => setSignupMobile(e.target.value)} placeholder="+91 9876543210" />
+              </div>
+              <button type="submit" className="btn btn-success w-100 fw-bold py-2 mb-3">Register New Admin</button>
               <div className="text-center">
                 <button type="button" className="btn btn-link text-decoration-none small" onClick={() => setIsSignup(false)}>
                   Already have an account? <b>Login here</b>
