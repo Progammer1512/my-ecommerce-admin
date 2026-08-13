@@ -341,7 +341,7 @@ app.delete('/api/auth/admin-users/:id', async (req, res) => {
   }
 });
 
-// 🟢 REPLACED OLD SIGNUP ROUTE: Redirects signup requests directly to adminusers collection
+// 🟢 DIRECT SIGNUP ROUTE (Saves directly to adminusers table)
 app.post('/api/auth/signup', async (req, res) => {
   try {
     const { name, email, password, role, mobile } = req.body;
@@ -383,10 +383,10 @@ app.post('/api/auth/signup', async (req, res) => {
   }
 });
 
-// ROUTER MIDDLEWARES
+// ROUTER MIDDLEWARES (Mounted properly to resolve 404 error)
 app.use('/api/products', require('./routes/productRoutes'));
 app.use('/api/orders', require('./routes/orderRoutes'));
-// Note: authRoutes signup is fully bypassed and handled above to prevent any users table leaks!
+app.use('/api/auth', require('./routes/authRoutes')); // 🟢 THIS WAS MISSING OR UNMOUNTED CAUSING 404 ERROR
 
 // Root Healthcheck Route
 app.get('/', (req, res) => {
