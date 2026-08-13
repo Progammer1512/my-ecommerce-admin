@@ -3,7 +3,7 @@ const router = express.Router();
 const jwt = require('jsonwebtoken');
 const mongoose = require('mongoose');
 
-// 🟢 STRICT SCHEMA BOUND DIRECTLY TO 'adminusers' COLLECTION
+// 🟢 STRICT SCHEMA BOUND DIRECTLY TO 'adminusers' COLLECTION (With Mobile Support)
 const adminUserSchema = new mongoose.Schema({
   name: { type: String, required: true, trim: true },
   email: { type: String, required: true, unique: true, lowercase: true, trim: true },
@@ -15,10 +15,10 @@ const adminUserSchema = new mongoose.Schema({
 // Forcefully bind to 'adminusers' collection in MongoDB Atlas
 const AdminUser = mongoose.models.AdminUser || mongoose.model('AdminUser', adminUserSchema, 'adminusers');
 
-// 1. SIGNUP ROUTE (Guaranteed to save ONLY in adminusers collection)
+// 1. SIGNUP ROUTE (Guaranteed to save ONLY in adminusers collection with Mobile)
 router.post('/signup', async (req, res) => {
   try {
-    const { name, email, password, role, secretCode } = req.body;
+    const { name, email, password, role, mobile, secretCode } = req.body;
 
     if (!name || !email || !password) {
       return res.status(400).json({ message: 'Name, email, and password are required' });
@@ -43,12 +43,13 @@ router.post('/signup', async (req, res) => {
     else if (assignedRole.toLowerCase() === 'superadmin') assignedRole = 'SuperAdmin';
     else assignedRole = 'Admin';
 
-    // Save exclusively to adminusers collection
+    // Save exclusively to adminusers collection with mobile
     const newUser = new AdminUser({
       name: name.trim(),
       email: cleanEmail,
       password: password.trim(), 
-      role: assignedRole
+      role: assignedRole,
+      mobile: mobile ? mobile.trim() : ''
     });
 
     await newUser.save();
@@ -61,7 +62,8 @@ router.post('/signup', async (req, res) => {
         id: newUser._id,
         name: newUser.name,
         email: newUser.email,
-        role: newUser.role
+        role: newUser.role,
+        mobile: newUser.mobile
       }
     });
   } catch (error) {
@@ -70,7 +72,7 @@ router.post('/signup', async (req, res) => {
   }
 });
 
-// 2. LOGIN ROUTE (Fetches ONLY from adminusers collection)
+// 2. LOGIN ROUTE (Fetches strictly and ONLY from adminusers collection)
 router.post('/login', async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -82,7 +84,7 @@ router.post('/login', async (req, res) => {
     const cleanEmail = email.trim().toLowerCase();
     const cleanPassword = password.trim();
 
-    // Find strictly in adminusers collection
+    // Find strictly in adminusers collection (Bypasses regular users table completely)
     const user = await AdminUser.findOne({ email: cleanEmail });
     if (!user) {
       return res.status(401).json({ message: 'Invalid email or password' });
@@ -107,6 +109,7 @@ router.post('/login', async (req, res) => {
       name: user.name,
       email: user.email,
       role: finalRole,
+      mobile: user.mobile || '',
       token
     });
   } catch (error) {
