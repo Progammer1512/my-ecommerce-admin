@@ -1,8 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
+import Papa from 'papaparse';
 import 'bootstrap/dist/css/bootstrap.min.css';
-import { GoogleLogin, googleLogout } from '@react-oauth/google';
-import { jwtDecode } from 'jwt-decode';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
 import { hasTabAccess } from './roleConfig';
 
@@ -264,7 +263,7 @@ function App() {
         console.log("Customer fetch fallback");
       }
 
-      // 🟢 FETCH ADMIN/STAFF USERS LIST
+      // 🟢 FETCH ADMIN/STAFF USERS LIST FROM MONGODB
       try {
         const adminRes = await axios.get(`${BASE_URL}/api/auth/admin-users`, authConfig);
         if (Array.isArray(adminRes.data)) {
@@ -904,7 +903,7 @@ function App() {
               <i className="bi bi-people-fill me-2"></i>👥 Customers & Wishlist ({customersList.length})
             </button>
 
-            {/* 🟢 NEW ADMIN USERS MANAGEMENT TAB */}
+            {/* 🟢 NEW ADMIN TAB PLACED DIRECTLY BELOW CUSTOMERS & WISHLIST */}
             <button 
               className={`nav-link text-start fw-bold ${activeTab === 'admin-users' ? 'active bg-warning text-dark' : 'text-white'}`} 
               onClick={() => handleTabSelect('admin-users')}
@@ -985,7 +984,7 @@ function App() {
           </div>
         )}
 
-        {/* CUSTOMERS INTELLIGENCE TAB (PURE CUSTOMERS ONLY, NO ADMINS/STAFF) */}
+        {/* CUSTOMERS INTELLIGENCE TAB (PURE STORE CUSTOMERS ONLY) */}
         {activeTab === 'customers' && (
           <div>
             <div className="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
@@ -1079,7 +1078,7 @@ function App() {
           </div>
         )}
 
-        {/* 🟢 NEW ADMIN & STAFF USERS MANAGEMENT TAB */}
+        {/* 🟢 NEW ADMIN USERS MANAGEMENT TAB (PLACED RIGHT BELOW CUSTOMERS & WISHLIST) */}
         {activeTab === 'admin-users' && (
           <div>
             <div className="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
@@ -1113,7 +1112,7 @@ function App() {
                       <tr>
                         <td colSpan="5" className="text-center py-5 text-muted">
                           <i className="bi bi-shield-lock fs-2 d-block mb-2 text-secondary"></i>
-                          <h5>No admin or staff users found.</h5>
+                          <h5>No admin or staff users found in database.</h5>
                         </td>
                       </tr>
                     ) : (
