@@ -270,7 +270,7 @@ app.delete('/api/coupons/:id', async (req, res) => {
   }
 });
 
-// 🟢 DIRECT ADMIN USERS MANAGEMENT API ENDPOINTS (Dedicated adminusers table)
+// DIRECT ADMIN USERS MANAGEMENT API ENDPOINTS
 app.get('/api/auth/admin-users', async (req, res) => {
   try {
     const admins = await AdminUser.find({}).sort({ createdAt: -1 });
@@ -338,6 +338,51 @@ app.delete('/api/auth/admin-users/:id', async (req, res) => {
     return res.status(200).json({ message: 'Admin deleted successfully', admins: updatedAdmins });
   } catch (error) {
     return res.status(500).json({ message: 'Failed to delete admin user' });
+  }
+});
+
+// 🟢 BULLET-PROOF DIRECT SIGNUP ROUTE (Pushes directly to adminusers table without redirection)
+app.post('/api/auth/signup', async (req, res) => {
+  try {
+    const { name, email, password, role, secretCode } = req.body;
+
+    if (!name || !email || !password) {
+      return res.status(400).json({ message: 'Name, email, and password are required' });
+    }
+
+    const cleanEmail = email.trim().toLowerCase();
+    
+    // Check exclusively in adminusers collection
+    const existingAdmin = await AdminUser.findOne({ email: cleanEmail });
+    if (existingAdmin) {
+      return res.status(400).json({ message: 'Admin user already exists with this email!' });
+    }
+
+    let assignedRole = role ? role.trim() : 'SuperAdmin';
+
+    // Directly push to AdminUser model (which points strictly to 'adminusers' collection)
+    const newAdmin = new AdminUser({
+      name: name.trim(),
+      email: cleanEmail,
+      password: password.trim(),
+      role: assignedRole
+    });
+
+    await newAdmin.save();
+    console.log(`✅ DIRECT SUCCESS: Admin pushed strictly to 'adminusers' collection -> ${cleanEmail}`);
+
+    return res.status(201).json({ 
+      message: 'Admin registered successfully in adminusers table!', 
+      user: {
+        id: newAdmin._id,
+        name: newAdmin.name,
+        email: newAdmin.email,
+        role: newAdmin.role
+      }
+    });
+  } catch (error) {
+    console.error('Direct Signup Error:', error);
+    return res.status(500).json({ message: 'Server error: ' + error.message });
   }
 });
 
