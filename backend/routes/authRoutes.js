@@ -3,7 +3,7 @@ const router = express.Router();
 const jwt = require('jsonwebtoken');
 const mongoose = require('mongoose');
 
-// 🟢 DIRECT DEFINITION: Forcefully target 'adminusers' collection to avoid any model confusion
+// 🟢 STRICT SCHEMA BOUND DIRECTLY TO 'adminusers' COLLECTION
 const adminUserSchema = new mongoose.Schema({
   name: { type: String, required: true, trim: true },
   email: { type: String, required: true, unique: true, lowercase: true, trim: true },
@@ -12,7 +12,7 @@ const adminUserSchema = new mongoose.Schema({
   mobile: { type: String, default: '' }
 }, { timestamps: true });
 
-// Explicitly bind to 'adminusers' collection in MongoDB Atlas
+// Forcefully bind to 'adminusers' collection in MongoDB Atlas
 const AdminUser = mongoose.models.AdminUser || mongoose.model('AdminUser', adminUserSchema, 'adminusers');
 
 // 1. SIGNUP ROUTE (Guaranteed to save ONLY in adminusers collection)
@@ -31,7 +31,7 @@ router.post('/signup', async (req, res) => {
 
     const cleanEmail = email.trim().toLowerCase();
     
-    // Check in adminusers collection
+    // Check in adminusers collection exclusively
     const existingUser = await AdminUser.findOne({ email: cleanEmail });
     if (existingUser) {
       return res.status(400).json({ message: 'Admin user already exists with this email!' });
@@ -43,7 +43,7 @@ router.post('/signup', async (req, res) => {
     else if (assignedRole.toLowerCase() === 'superadmin') assignedRole = 'SuperAdmin';
     else assignedRole = 'Admin';
 
-    // Save exclusively to adminusers
+    // Save exclusively to adminusers collection
     const newUser = new AdminUser({
       name: name.trim(),
       email: cleanEmail,
@@ -53,7 +53,7 @@ router.post('/signup', async (req, res) => {
 
     await newUser.save();
 
-    console.log(`✅ SUCCESS: Admin saved to 'adminusers' collection -> ${cleanEmail}`);
+    console.log(`✅ SUCCESS: Admin saved strictly to 'adminusers' collection -> ${cleanEmail}`);
 
     return res.status(201).json({ 
       message: 'Admin/Staff registered successfully!', 
@@ -100,6 +100,8 @@ router.post('/login', async (req, res) => {
       { expiresIn: '30d' }
     );
 
+    console.log(`🔓 SUCCESS: Admin logged in from 'adminusers' collection -> ${cleanEmail}`);
+
     return res.json({
       _id: user._id,
       name: user.name,
@@ -108,6 +110,7 @@ router.post('/login', async (req, res) => {
       token
     });
   } catch (error) {
+    console.error('Login Error:', error);
     return res.status(500).json({ message: 'Login error: ' + error.message });
   }
 });
