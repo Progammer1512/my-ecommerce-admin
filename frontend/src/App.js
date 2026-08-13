@@ -1,14 +1,15 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
-import Papa from 'papaparse';
 import 'bootstrap/dist/css/bootstrap.min.css';
+import { GoogleLogin, googleLogout } from '@react-oauth/google';
+import { jwtDecode } from 'jwt-decode';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
 import { hasTabAccess } from './roleConfig';
 
 // LIVE BACKEND BASE URL (NO TRAILING SLASH)
 const BASE_URL = 'https://my-ecommerce-project-nmfj.onrender.com';
 
-// HELPER: SANITIZE OLD LOCALHOST IMAGE URLS
+// Helper to sanitize old localhost image urls
 const getCleanImageUrl = (url) => {
   if (!url) return '';
   if (typeof url === 'string' && url.includes('localhost:5000')) {
@@ -49,6 +50,12 @@ function App() {
   const [reviews, setReviews] = useState([]);
   const [customersList, setCustomersList] = useState([]);
   const [csvFile, setCsvFile] = useState(null);
+
+  // 🟢 NEW ADMIN USERS MANAGEMENT STATES
+  const [adminUsersList, setAdminUsersList] = useState([]);
+  const [showAddAdminModal, setShowAddAdminModal] = useState(false);
+  const [editingAdminUser, setEditingAdminUser] = useState(null);
+  const [adminFormData, setAdminFormData] = useState({ name: '', email: '', password: '', role: 'Admin', mobile: '' });
 
   const [orderSearchTerm, setOrderSearchTerm] = useState('');
   const [orderStatusFilter, setOrderStatusFilter] = useState('ALL');
@@ -256,6 +263,16 @@ function App() {
       } catch (e) {
         console.log("Customer fetch fallback");
       }
+
+      // 🟢 FETCH ADMIN/STAFF USERS LIST
+      try {
+        const adminRes = await axios.get(`${BASE_URL}/api/auth/admin-users`, authConfig);
+        if (Array.isArray(adminRes.data)) {
+          setAdminUsersList(adminRes.data);
+        }
+      } catch (e) {
+        console.log("Admin users fetch fallback");
+      }
     } catch (error) {
       console.error('Error fetching admin data:', error);
     }
@@ -268,6 +285,42 @@ function App() {
       return () => clearInterval(interval);
     }
   }, [user]);
+
+  // 🟢 ADMIN USERS CRUD HANDLERS
+  const handleSaveAdminUser = async (e) => {
+    e.preventDefault();
+    try {
+      const authConfig = getAuthHeader();
+      if (editingAdminUser) {
+        const res = await axios.put(`${BASE_URL}/api/auth/admin-users/${editingAdminUser._id || editingAdminUser.id}`, adminFormData, authConfig);
+        alert('✅ Admin/Staff user updated successfully!');
+        setAdminUsersList(res.data.admins || []);
+      } else {
+        const res = await axios.post(`${BASE_URL}/api/auth/admin-users`, adminFormData, authConfig);
+        alert('🎉 New Admin/Staff user created successfully!');
+        setAdminUsersList(res.data.admins || []);
+      }
+      setShowAddAdminModal(false);
+      setEditingAdminUser(null);
+      setAdminFormData({ name: '', email: '', password: '', role: 'Admin', mobile: '' });
+      fetchData();
+    } catch (err) {
+      alert('Action failed: ' + (err.response?.data?.message || err.message));
+    }
+  };
+
+  const handleDeleteAdminUser = async (id) => {
+    if (window.confirm('⚠️ Are you sure you want to delete this admin/staff user?')) {
+      try {
+        const authConfig = getAuthHeader();
+        const res = await axios.delete(`${BASE_URL}/api/auth/admin-users/${id}`, authConfig);
+        alert('🗑️ Admin/Staff user deleted successfully!');
+        setAdminUsersList(res.data.admins || []);
+      } catch (err) {
+        alert('Delete failed: ' + (err.response?.data?.message || err.message));
+      }
+    }
+  };
 
   const totalRevenue = orders.reduce((acc, curr) => acc + (curr.totalPrice || 0), 0);
   const totalOrdersCount = orders.length;
@@ -843,12 +896,20 @@ function App() {
               </button>
             )}
 
-            {/* 🟢 NEW CUSTOMERS & WISHLIST INTELLIGENCE TAB */}
+            {/* CUSTOMERS & WISHLIST INTELLIGENCE TAB */}
             <button 
               className={`nav-link text-start fw-bold ${activeTab === 'customers' ? 'active bg-warning text-dark' : 'text-white'}`} 
               onClick={() => handleTabSelect('customers')}
             >
               <i className="bi bi-people-fill me-2"></i>👥 Customers & Wishlist ({customersList.length})
+            </button>
+
+            {/* 🟢 NEW ADMIN USERS MANAGEMENT TAB */}
+            <button 
+              className={`nav-link text-start fw-bold ${activeTab === 'admin-users' ? 'active bg-warning text-dark' : 'text-white'}`} 
+              onClick={() => handleTabSelect('admin-users')}
+            >
+              <i className="bi bi-shield-lock-fill me-2"></i>⚙️ Admin Users ({adminUsersList.length})
             </button>
           </div>
         </div>
@@ -924,7 +985,7 @@ function App() {
           </div>
         )}
 
-        {/* 🟢 NEW CUSTOMERS INTELLIGENCE TAB (SORT BY ABANDONED CART / WISHLIST) */}
+        {/* CUSTOMERS INTELLIGENCE TAB (PURE CUSTOMERS ONLY, NO ADMINS/STAFF) */}
         {activeTab === 'customers' && (
           <div>
             <div className="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
@@ -937,7 +998,7 @@ function App() {
                   onChange={(e) => setCustomerFilter(e.target.value)}
                   style={{ width: '250px' }}
                 >
-                  <option value="ALL">🌟 All Registered Customers ({customersList.length})</option>
+                  <option value="ALL">🌟 All Store Customers ({customersList.length})</option>
                   <option value="CART">🛒 Abandoned Cart Customers Only</option>
                   <option value="WISHLIST">❤️ Wishlist Left Customers Only</option>
                 </select>
@@ -1018,7 +1079,170 @@ function App() {
           </div>
         )}
 
-        {/* 🟢 EXCLUSIVE PERSONAL DISCOUNT ISSUANCE MODAL */}
+        {/* 🟢 NEW ADMIN & STAFF USERS MANAGEMENT TAB */}
+        {activeTab === 'admin-users' && (
+          <div>
+            <div className="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+              <h3 className="fw-bold m-0">⚙️ Admin & Staff Users Management</h3>
+              <button 
+                className="btn btn-primary fw-bold btn-sm shadow-sm"
+                onClick={() => {
+                  setEditingAdminUser(null);
+                  setAdminFormData({ name: '', email: '', password: '', role: 'Admin', mobile: '' });
+                  setShowAddAdminModal(true);
+                }}
+              >
+                ➕ Create New Admin / Staff
+              </button>
+            </div>
+
+            <div className="card border-0 shadow-sm p-3 bg-white">
+              <div className="table-responsive">
+                <table className="table table-bordered table-hover align-middle m-0">
+                  <thead className="table-dark text-nowrap">
+                    <tr>
+                      <th>Name</th>
+                      <th>Email & Mobile</th>
+                      <th>Role / Permission</th>
+                      <th>Created Date</th>
+                      <th className="text-center">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {adminUsersList.length === 0 ? (
+                      <tr>
+                        <td colSpan="5" className="text-center py-5 text-muted">
+                          <i className="bi bi-shield-lock fs-2 d-block mb-2 text-secondary"></i>
+                          <h5>No admin or staff users found.</h5>
+                        </td>
+                      </tr>
+                    ) : (
+                      adminUsersList.map((adm) => {
+                        const admId = adm._id || adm.id;
+                        return (
+                          <tr key={admId}>
+                            <td className="fw-bold text-dark">{adm.name}</td>
+                            <td>
+                              <span className="fw-semibold text-primary d-block">{adm.email}</span>
+                              <small className="text-muted">{adm.mobile || 'No Mobile'}</small>
+                            </td>
+                            <td>
+                              <span className={`badge ${adm.role === 'SuperAdmin' ? 'bg-danger' : 'bg-info text-dark'} px-2 py-1`}>
+                                {adm.role || 'Admin'}
+                              </span>
+                            </td>
+                            <td className="small text-muted">
+                              {adm.createdAt ? new Date(adm.createdAt).toLocaleDateString('en-IN') : 'Recent'}
+                            </td>
+                            <td className="text-center" style={{ whiteSpace: 'nowrap' }}>
+                              <button 
+                                className="btn btn-sm btn-outline-primary fw-bold me-2"
+                                onClick={() => {
+                                  setEditingAdminUser(adm);
+                                  setAdminFormData({ name: adm.name, email: adm.email, password: '', role: adm.role || 'Admin', mobile: adm.mobile || '' });
+                                  setShowAddAdminModal(true);
+                                }}
+                              >
+                                Edit
+                              </button>
+                              <button 
+                                className="btn btn-sm btn-outline-danger fw-bold"
+                                onClick={() => handleDeleteAdminUser(admId)}
+                              >
+                                Delete
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 🟢 ADD / EDIT ADMIN USER MODAL */}
+        {showAddAdminModal && (
+          <div className="modal show d-block bg-dark bg-opacity-50" tabIndex="-1" style={{ zIndex: 1070 }}>
+            <div className="modal-dialog modal-dialog-centered">
+              <div className="modal-content border-0 shadow-lg p-3 p-md-4 rounded-4">
+                <div className="d-flex justify-content-between align-items-center border-bottom pb-2 mb-3">
+                  <h5 className="fw-bold mb-0 text-primary">
+                    {editingAdminUser ? '✏️ Edit Admin / Staff User' : '➕ Create New Admin / Staff User'}
+                  </h5>
+                  <button type="button" className="btn-close" onClick={() => setShowAddAdminModal(false)}></button>
+                </div>
+
+                <form onSubmit={handleSaveAdminUser}>
+                  <div className="mb-2">
+                    <label className="form-label fw-bold small">Full Name</label>
+                    <input 
+                      type="text" 
+                      className="form-control" 
+                      required 
+                      value={adminFormData.name} 
+                      onChange={(e) => setAdminFormData({...adminFormData, name: e.target.value})} 
+                      placeholder="John Manager"
+                    />
+                  </div>
+                  <div className="mb-2">
+                    <label className="form-label fw-bold small">Email ID</label>
+                    <input 
+                      type="email" 
+                      className="form-control" 
+                      required 
+                      value={adminFormData.email} 
+                      onChange={(e) => setAdminFormData({...adminFormData, email: e.target.value})} 
+                      placeholder="manager@techstore.com"
+                    />
+                  </div>
+                  <div className="mb-2">
+                    <label className="form-label fw-bold small">Password {editingAdminUser && '(Leave blank to keep old)'}</label>
+                    <input 
+                      type="password" 
+                      className="form-control" 
+                      required={!editingAdminUser} 
+                      value={adminFormData.password} 
+                      onChange={(e) => setAdminFormData({...adminFormData, password: e.target.value})} 
+                      placeholder="••••••••"
+                    />
+                  </div>
+                  <div className="mb-2">
+                    <label className="form-label fw-bold small">Role / Permission</label>
+                    <select 
+                      className="form-select fw-bold text-primary" 
+                      value={adminFormData.role} 
+                      onChange={(e) => setAdminFormData({...adminFormData, role: e.target.value})}
+                    >
+                      <option value="SuperAdmin">SuperAdmin (Full Access)</option>
+                      <option value="InventoryManager">InventoryManager (Products & Stock)</option>
+                      <option value="Staff">Support Staff (Orders & Reviews)</option>
+                    </select>
+                  </div>
+                  <div className="mb-3">
+                    <label className="form-label fw-bold small">Mobile Number</label>
+                    <input 
+                      type="tel" 
+                      className="form-control" 
+                      value={adminFormData.mobile} 
+                      onChange={(e) => setAdminFormData({...adminFormData, mobile: e.target.value})} 
+                      placeholder="+91 9876543210"
+                    />
+                  </div>
+
+                  <div className="d-flex justify-content-end gap-2 pt-2 border-top">
+                    <button type="button" className="btn btn-outline-secondary" onClick={() => setShowAddAdminModal(false)}>Cancel</button>
+                    <button type="submit" className="btn btn-primary fw-bold px-4">Save Admin User</button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* EXCLUSIVE PERSONAL DISCOUNT ISSUANCE MODAL */}
         {showPersonalDiscountModal && selectedTargetCustomer && (
           <div className="modal show d-block bg-dark bg-opacity-50" tabIndex="-1" style={{ zIndex: 1070 }}>
             <div className="modal-dialog modal-dialog-centered">
