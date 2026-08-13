@@ -30,15 +30,6 @@ function App() {
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
   
-  // SIGNUP STATES (Updated with Mobile Number to match internal admin creator)
-  const [isSignup, setIsSignup] = useState(false);
-  const [signupName, setSignupName] = useState('');
-  const [signupEmail, setSignupEmail] = useState('');
-  const [signupPassword, setSignupPassword] = useState('');
-  const [signupRole, setSignupRole] = useState('Admin');
-  const [signupMobile, setSignupMobile] = useState('');
-  const [signupSecretCode, setSignupSecretCode] = useState('');
-
   // SIDEBAR TOGGLE STATE
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
@@ -51,7 +42,7 @@ function App() {
   const [customersList, setCustomersList] = useState([]);
   const [csvFile, setCsvFile] = useState(null);
 
-  // 🟢 NEW ADMIN USERS MANAGEMENT STATES
+  // 🟢 ADMIN USERS MANAGEMENT STATES (Used for both Internal & Public Sign Up)
   const [adminUsersList, setAdminUsersList] = useState([]);
   const [showAddAdminModal, setShowAddAdminModal] = useState(false);
   const [editingAdminUser, setEditingAdminUser] = useState(null);
@@ -180,41 +171,17 @@ function App() {
     }
   };
 
+  // 🟢 PUBLIC SIGNUP TRIGGERED VIA ADMIN MODAL WITH SECURITY CODE CHECK
   const handleOpenSignup = () => {
     const enteredCode = prompt("🔒 Enter Admin Security Secret Code to Access Signup:");
     if (enteredCode === null) return;
 
     if (enteredCode.trim() === 'iamthebest~$@%^&15121') {
-      setIsSignup(true);
-      setSignupSecretCode(enteredCode.trim());
+      setEditingAdminUser(null);
+      setAdminFormData({ name: '', email: '', password: '', role: 'SuperAdmin', mobile: '' });
+      setShowAddAdminModal(true); // Opens the exact same admin creator modal for public signup
     } else {
       alert("❌ Access Denied: Incorrect Secret Code!");
-    }
-  };
-
-  const handleSignup = async (e) => {
-    e.preventDefault();
-    try {
-      const response = await axios.post(`${BASE_URL}/api/auth/signup`, {
-        name: signupName,
-        email: signupEmail,
-        password: signupPassword,
-        role: signupRole,
-        mobile: signupMobile,
-        secretCode: signupSecretCode
-      });
-
-      alert(response.data.message || 'Signup successful! Please login now.');
-      setIsSignup(false);
-      setLoginEmail(signupEmail);
-      setSignupName('');
-      setSignupEmail('');
-      setSignupPassword('');
-      setSignupMobile('');
-      setSignupSecretCode('');
-    } catch (error) {
-      console.error('Signup Error:', error);
-      alert('Signup Failed: ' + (error.response?.data?.message || 'Something went wrong!'));
     }
   };
 
@@ -288,7 +255,7 @@ function App() {
     }
   }, [user]);
 
-  // 🟢 ADMIN USERS CRUD HANDLERS
+  // 🟢 ADMIN USERS CRUD HANDLERS (Saves directly to adminusers table)
   const handleSaveAdminUser = async (e) => {
     e.preventDefault();
     try {
@@ -298,8 +265,8 @@ function App() {
         alert('✅ Admin/Staff user updated successfully!');
         setAdminUsersList(res.data.admins || []);
       } else {
-        const res = await axios.post(`${BASE_URL}/api/auth/admin-users`, adminFormData, authConfig);
-        alert('🎉 New Admin/Staff user created successfully!');
+        const res = await axios.post(`${BASE_URL}/api/auth/admin-users`, adminFormData);
+        alert('🎉 New Admin/Staff user created successfully! Please login now.');
         setAdminUsersList(res.data.admins || []);
       }
       setShowAddAdminModal(false);
@@ -732,59 +699,104 @@ function App() {
             <p className="text-muted small">Admin & Staff Access Guard</p>
           </div>
 
-          {!isSignup ? (
-            <form onSubmit={handleLogin}>
-              <div className="mb-3">
-                <label className="form-label fw-bold">Email Address</label>
-                <input type="email" className="form-control" required value={loginEmail} onChange={(e) => setLoginEmail(e.target.value)} placeholder="admin@techstore.com" />
-              </div>
-              <div className="mb-4">
-                <label className="form-label fw-bold">Password</label>
-                <input type="password" className="form-control" required value={loginPassword} onChange={(e) => setLoginPassword(e.target.value)} placeholder="••••••••" />
-              </div>
-              <button type="submit" className="btn btn-primary w-100 fw-bold py-2 mb-3">Login to Portal</button>
-              <div className="text-center">
-                <button type="button" className="btn btn-link text-decoration-none small" onClick={handleOpenSignup}>
-                  Don't have an account? <b>Sign Up here</b>
-                </button>
-              </div>
-            </form>
-          ) : (
-            <form onSubmit={handleSignup}>
-              <div className="mb-2">
-                <label className="form-label fw-bold small">Full Name</label>
-                <input type="text" className="form-control" required value={signupName} onChange={(e) => setSignupName(e.target.value)} placeholder="John Manager" />
-              </div>
-              <div className="mb-2">
-                <label className="form-label fw-bold small">Email ID</label>
-                <input type="email" className="form-control" required value={signupEmail} onChange={(e) => setSignupEmail(e.target.value)} placeholder="manager@techstore.com" />
-              </div>
-              <div className="mb-2">
-                <label className="form-label fw-bold small">Password</label>
-                <input type="password" className="form-control" required value={signupPassword} onChange={(e) => setSignupPassword(e.target.value)} placeholder="••••••••" />
-              </div>
-              <div className="mb-2">
-                <label className="form-label fw-bold small">Role / Permission</label>
-                <select className="form-select fw-bold text-primary" value={signupRole} onChange={(e) => setSignupRole(e.target.value)}>
-                  <option value="SuperAdmin">SuperAdmin (Full Access)</option>
-                  <option value="InventoryManager">InventoryManager (Products & Stock)</option>
-                  <option value="Staff">Support Staff (Orders & Reviews)</option>
-                </select>
-              </div>
-              <div className="mb-3">
-                <label className="form-label fw-bold small">Mobile Number</label>
-                <input type="tel" className="form-control" value={signupMobile} onChange={(e) => setSignupMobile(e.target.value)} placeholder="+91 9876543210" />
-              </div>
-              <button type="submit" className="btn btn-success w-100 fw-bold py-2 mb-3">Register New Admin</button>
-              <div className="text-center">
-                <button type="button" className="btn btn-link text-decoration-none small" onClick={() => setIsSignup(false)}>
-                  Already have an account? <b>Login here</b>
-                </button>
-              </div>
-            </form>
-          )}
+          {/* 🟢 SINGLE UNIFIED LOGIN / SIGNUP TRIGGER (NO SEPARATE FORMS) */}
+          <form onSubmit={handleLogin}>
+            <div className="mb-3">
+              <label className="form-label fw-bold">Email Address</label>
+              <input type="email" className="form-control" required value={loginEmail} onChange={(e) => setLoginEmail(e.target.value)} placeholder="admin@techstore.com" />
+            </div>
+            <div className="mb-4">
+              <label className="form-label fw-bold">Password</label>
+              <input type="password" className="form-control" required value={loginPassword} onChange={(e) => setLoginPassword(e.target.value)} placeholder="••••••••" />
+            </div>
+            <button type="submit" className="btn btn-primary w-100 fw-bold py-2 mb-3">Login to Portal</button>
+            <div className="text-center">
+              <button type="button" className="btn btn-link text-decoration-none small" onClick={handleOpenSignup}>
+                Don't have an account? <b>Sign Up here</b>
+              </button>
+            </div>
+          </form>
 
         </div>
+
+        {/* 🟢 UNIFIED MODAL FOR BOTH PUBLIC SIGNUP AND INTERNAL ADMIN CREATION */}
+        {showAddAdminModal && (
+          <div className="modal show d-block bg-dark bg-opacity-50" tabIndex="-1" style={{ zIndex: 1070 }}>
+            <div className="modal-dialog modal-dialog-centered">
+              <div className="modal-content border-0 shadow-lg p-3 p-md-4 rounded-4">
+                <div className="d-flex justify-content-between align-items-center border-bottom pb-2 mb-3">
+                  <h5 className="fw-bold mb-0 text-primary">
+                    {editingAdminUser ? '✏️ Edit Admin / Staff User' : '➕ Register New Admin / Staff'}
+                  </h5>
+                  <button type="button" className="btn-close" onClick={() => setShowAddAdminModal(false)}></button>
+                </div>
+
+                <form onSubmit={handleSaveAdminUser}>
+                  <div className="mb-2">
+                    <label className="form-label fw-bold small">Full Name</label>
+                    <input 
+                      type="text" 
+                      className="form-control" 
+                      required 
+                      value={adminFormData.name} 
+                      onChange={(e) => setAdminFormData({...adminFormData, name: e.target.value})} 
+                      placeholder="John Manager"
+                    />
+                  </div>
+                  <div className="mb-2">
+                    <label className="form-label fw-bold small">Email ID</label>
+                    <input 
+                      type="email" 
+                      className="form-control" 
+                      required 
+                      value={adminFormData.email} 
+                      onChange={(e) => setAdminFormData({...adminFormData, email: e.target.value})} 
+                      placeholder="manager@techstore.com"
+                    />
+                  </div>
+                  <div className="mb-2">
+                    <label className="form-label fw-bold small">Password {editingAdminUser && '(Leave blank to keep old)'}</label>
+                    <input 
+                      type="password" 
+                      className="form-control" 
+                      required={!editingAdminUser} 
+                      value={adminFormData.password} 
+                      onChange={(e) => setAdminFormData({...adminFormData, password: e.target.value})} 
+                      placeholder="••••••••"
+                    />
+                  </div>
+                  <div className="mb-2">
+                    <label className="form-label fw-bold small">Role / Permission</label>
+                    <select 
+                      className="form-select fw-bold text-primary" 
+                      value={adminFormData.role} 
+                      onChange={(e) => setAdminFormData({...adminFormData, role: e.target.value})}
+                    >
+                      <option value="SuperAdmin">SuperAdmin (Full Access)</option>
+                      <option value="InventoryManager">InventoryManager (Products & Stock)</option>
+                      <option value="Staff">Support Staff (Orders & Reviews)</option>
+                    </select>
+                  </div>
+                  <div className="mb-3">
+                    <label className="form-label fw-bold small">Mobile Number</label>
+                    <input 
+                      type="tel" 
+                      className="form-control" 
+                      value={adminFormData.mobile} 
+                      onChange={(e) => setAdminFormData({...adminFormData, mobile: e.target.value})} 
+                      placeholder="+91 9876543210"
+                    />
+                  </div>
+
+                  <div className="d-flex justify-content-end gap-2 pt-2 border-top">
+                    <button type="button" className="btn btn-outline-secondary" onClick={() => setShowAddAdminModal(false)}>Cancel</button>
+                    <button type="submit" className="btn btn-primary fw-bold px-4">Save Admin User</button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
