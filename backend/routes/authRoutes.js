@@ -1,7 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const jwt = require('jsonwebtoken');
-const User = require('../models/User'); // User model import kar liya
+// 🟢 IMPORT AdminUser MODEL INSTEAD OF User
+const { AdminUser } = require('../models/User'); 
 
 // 1. SIGNUP ROUTE (Database mein naya admin/staff register karne ke liye - Secured with Secret Code)
 router.post('/signup', async (req, res) => {
@@ -20,22 +21,22 @@ router.post('/signup', async (req, res) => {
 
     const cleanEmail = email.trim().toLowerCase();
     
-    // Check if user already exists
-    const existingUser = await User.findOne({ email: cleanEmail });
+    // Check if admin user already exists in AdminUser collection
+    const existingUser = await AdminUser.findOne({ email: cleanEmail });
     if (existingUser) {
-      return res.status(400).json({ message: 'User already exists with this email!' });
+      return res.status(400).json({ message: 'Admin user already exists with this email!' });
     }
 
-    // Determine role and sanitize it properly to match User schema enum
+    // Determine role and sanitize it properly
     let assignedRole = role ? role.trim() : 'Staff';
     
-    // Fallback normalization just in case
     if (assignedRole.toLowerCase() === 'inventorymanager') assignedRole = 'InventoryManager';
     else if (assignedRole.toLowerCase() === 'staff') assignedRole = 'Staff';
     else if (assignedRole.toLowerCase() === 'superadmin') assignedRole = 'SuperAdmin';
+    else assignedRole = 'Admin';
 
-    // Create new user with selected role
-    const newUser = new User({
+    // 🟢 SAVE NEW ADMIN TO AdminUser COLLECTION (Dedicated Admin Table)
+    const newUser = new AdminUser({
       name: name.trim(),
       email: cleanEmail,
       password: password.trim(), 
@@ -58,7 +59,7 @@ router.post('/signup', async (req, res) => {
   }
 });
 
-// 2. LOGIN ROUTE (MongoDB Database se verify karne ke liye)
+// 2. LOGIN ROUTE (Verify from AdminUser collection)
 router.post('/login', async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -70,8 +71,8 @@ router.post('/login', async (req, res) => {
     const cleanEmail = email.trim().toLowerCase();
     const cleanPassword = password.trim();
 
-    // Find user in MongoDB database
-    const user = await User.findOne({ email: cleanEmail });
+    // 🟢 FIND USER IN AdminUser COLLECTION
+    const user = await AdminUser.findOne({ email: cleanEmail });
     if (!user) {
       return res.status(401).json({ message: 'Invalid email or password' });
     }
