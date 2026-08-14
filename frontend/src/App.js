@@ -8,6 +8,15 @@ import { hasTabAccess } from './roleConfig';
 // LIVE BACKEND BASE URL (NO TRAILING SLASH)
 const BASE_URL = 'https://my-ecommerce-admin.onrender.com';
 
+// 🟢 HELPER 1: DETECT IF RUNNING AS INSTALLED STANDALONE APP
+const isRunningStandalone = () => {
+  return (
+    window.matchMedia('(display-mode: standalone)').matches ||
+    window.navigator.standalone === true ||
+    document.referrer.includes('android-app://')
+  );
+};
+
 // Helper to sanitize old localhost image urls
 const getCleanImageUrl = (url) => {
   if (!url) return '';
@@ -30,6 +39,9 @@ function App() {
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
   
+  // 📲 NATIVE PWA INSTALL PROMPT STATE FOR ADMIN
+  const [installPrompt, setInstallPrompt] = useState(null);
+
   // SIDEBAR TOGGLE STATE
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
@@ -86,6 +98,37 @@ function App() {
   const [newCouponDiscount, setNewCouponDiscount] = useState('');
   const [newCouponCategory, setNewCouponCategory] = useState('All');
   const [newCouponMaxUsage, setNewCouponMaxUsage] = useState(50);
+
+  // 📲 PWA INSTALL EVENT LISTENER
+  useEffect(() => {
+    const handleBeforeInstall = (e) => {
+      e.preventDefault();
+      if (!isRunningStandalone()) {
+        setInstallPrompt(e);
+      }
+    };
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstall);
+
+    window.addEventListener('appinstalled', () => {
+      setInstallPrompt(null);
+      alert('🎉 TechStore Admin App installed successfully on your device!');
+    });
+
+    return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstall);
+  }, []);
+
+  const handleInstallAdminApp = async () => {
+    if (installPrompt) {
+      installPrompt.prompt();
+      const { outcome } = await installPrompt.userChoice;
+      if (outcome === 'accepted') {
+        setInstallPrompt(null);
+      }
+    } else {
+      alert("📱 To install Admin App:\n1. Tap browser menu (⋮)\n2. Click 'Install App' or 'Add to Home Screen'!");
+    }
+  };
 
   const handleTabSelect = (tabName) => {
     setActiveTab(tabName);
@@ -572,7 +615,7 @@ function App() {
       image, 
       stock: parsedStock,
       countInStock: parsedStock,
-      priority: parsedPriority // 🟢 Display Rank: 1 is highest priority
+      priority: parsedPriority
     };
 
     try {
@@ -861,12 +904,25 @@ function App() {
 
         <span className="fw-bold text-warning d-none d-sm-inline fs-5">TechStore Admin</span>
 
-        <button 
-          className="btn btn-danger btn-sm fw-bold px-3 py-1 rounded-pill shadow-sm d-flex align-items-center"
-          onClick={handleLogout}
-        >
-          <span>Logout</span>
-        </button>
+        <div className="d-flex align-items-center gap-2">
+          {/* 🟢 📲 1-CLICK INSTALL ADMIN APP BUTTON (APPEARS ONLY IN BROWSER ON MOBILE) */}
+          {installPrompt && !isRunningStandalone() && (
+            <button 
+              className="btn btn-outline-warning btn-sm fw-bold rounded-pill shadow-sm d-flex align-items-center gap-1"
+              onClick={handleInstallAdminApp}
+            >
+              <i className="bi bi-download"></i>
+              <span>Install App</span>
+            </button>
+          )}
+
+          <button 
+            className="btn btn-danger btn-sm fw-bold px-3 py-1 rounded-pill shadow-sm d-flex align-items-center"
+            onClick={handleLogout}
+          >
+            <span>Logout</span>
+          </button>
+        </div>
       </div>
 
       {/* SIDEBAR NAVIGATION DRAWER */}
@@ -902,7 +958,7 @@ function App() {
                 className={`nav-link text-start fw-bold ${activeTab === 'banners' ? 'active bg-warning text-dark' : 'text-white'}`} 
                 onClick={() => handleTabSelect('banners')}
               >
-                <i className="bi bi-images me-2"></i>🎨 Sliding Banners
+                <i className="bi bi-images me-2"></i>🎨 Sliding Banners (Priority)
               </button>
             )}
 
