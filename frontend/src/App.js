@@ -245,7 +245,10 @@ function App() {
 
       const prodRes = await axios.get(`${BASE_URL}/api/products`, authConfig);
       const fetchedProducts = prodRes.data.products || prodRes.data;
-      setProducts(Array.isArray(fetchedProducts) ? fetchedProducts : []);
+      const sortedProducts = Array.isArray(fetchedProducts) 
+        ? fetchedProducts.sort((a, b) => (Number(a.priority) || 100) - (Number(b.priority) || 100))
+        : [];
+      setProducts(sortedProducts);
 
       const existingCategories = Array.isArray(fetchedProducts) ? fetchedProducts.map(p => p.category).filter(Boolean) : [];
       setCategories(prev => Array.from(new Set([...prev, ...existingCategories])));
@@ -634,7 +637,7 @@ function App() {
     }
   };
 
-  // 🟢 1-CLICK SAVE PRODUCT RANK DIRECTLY FROM TABLE (INSTANT LIVE UPDATE)
+  // 🟢 1-CLICK SAVE PRODUCT RANK DIRECTLY TO MONGODB (INSTANT LIVE UPDATE)
   const handleSaveSingleProductRank = async (prod, rankValue) => {
     const targetId = prod._id || prod.id;
     const numRank = parseInt(rankValue, 10);
@@ -646,12 +649,27 @@ function App() {
 
     try {
       const authConfig = getAuthHeader();
-      await axios.put(`${BASE_URL}/api/products/${targetId}`, {
-        priority: numRank
-      }, authConfig);
+      
+      // Call dedicated priority route with fallback to full update
+      let res;
+      try {
+        res = await axios.put(`${BASE_URL}/api/products/${targetId}/priority`, { priority: numRank }, authConfig);
+      } catch (e) {
+        res = await axios.put(`${BASE_URL}/api/products/${targetId}`, { priority: numRank }, authConfig);
+      }
 
-      alert(`✅ Display Rank #${numRank} assigned successfully to '${prod.name}'!`);
-      fetchData();
+      if (res.status === 200) {
+        setProducts(prevProducts => {
+          const updated = prevProducts.map(p => 
+            (p._id === targetId || p.id === targetId) ? { ...p, priority: numRank } : p
+          );
+          return updated.sort((a, b) => (Number(a.priority) || 100) - (Number(b.priority) || 100));
+        });
+
+        setRankInputs(prev => ({ ...prev, [targetId]: numRank }));
+        alert(`✅ Display Rank #${numRank} assigned successfully to '${prod.name}'!`);
+        fetchData();
+      }
     } catch (err) {
       console.error('Failed to update rank:', err);
       alert('Failed to save rank: ' + (err.response?.data?.message || err.message));
