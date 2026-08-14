@@ -54,7 +54,7 @@ const upload = multer({ storage, limits: { fileSize: 10 * 1024 * 1024 } });
 // 🟢 1. CUSTOMER AUTH ROUTES (STRICTLY 'users' COLLECTION)
 // =========================================================================
 
-// A. Customer Google Login
+// Customer Google Login
 app.post('/api/auth/google', async (req, res) => {
   try {
     const { name, email, googleId, avatar } = req.body;
@@ -99,7 +99,7 @@ app.post('/api/auth/google', async (req, res) => {
   }
 });
 
-// B. Customer Email Signup
+// Customer Email Signup
 app.post('/api/auth/signup', async (req, res) => {
   try {
     const { name, email, password, mobile, address, pincode } = req.body;
@@ -135,15 +135,33 @@ app.post('/api/auth/signup', async (req, res) => {
   }
 });
 
-// C. Customer Email Login
+// Customer & Admin Combined Login Handler
 app.post('/api/auth/login', async (req, res) => {
   try {
     const { email, password } = req.body;
     if (!email) return res.status(400).json({ message: 'Email required' });
 
     const cleanEmail = email.toLowerCase().trim();
+
+    // Check in 'adminusers' first
+    const admin = await AdminUser.findOne({ email: cleanEmail });
+    if (admin && admin.password === password) {
+      const token = jwt.sign(
+        { id: admin._id, role: admin.role },
+        process.env.JWT_SECRET || 'techstore_secret_jwt_key_2026',
+        { expiresIn: '30d' }
+      );
+      return res.status(200).json({
+        message: 'Admin login successful',
+        token,
+        admin: { id: admin._id, name: admin.name, email: admin.email, role: admin.role },
+        user: { id: admin._id, name: admin.name, email: admin.email, role: admin.role }
+      });
+    }
+
+    // Check in 'users' (Customer)
     const user = await User.findOne({ email: cleanEmail });
-    if (!user) return res.status(404).json({ message: 'Customer not found. Please Sign Up.' });
+    if (!user) return res.status(404).json({ message: 'User not found. Please Sign Up.' });
 
     if (user.password !== 'google_authenticated_user' && password && user.password !== password) {
       return res.status(401).json({ message: 'Invalid Password!' });
@@ -168,11 +186,11 @@ app.post('/api/auth/login', async (req, res) => {
       }
     });
   } catch (err) {
-    return res.status(500).json({ message: 'Customer login failed: ' + err.message });
+    return res.status(500).json({ message: 'Login failed: ' + err.message });
   }
 });
 
-// D. Customer Profile & Cart/Wishlist Sync
+// Customer Profile & Cart/Wishlist Sync
 app.put('/api/auth/profile', async (req, res) => {
   try {
     const { email, name, mobile, address, pincode, cart, wishlist } = req.body;
@@ -216,7 +234,7 @@ app.put('/api/auth/profile', async (req, res) => {
   }
 });
 
-// E. Customer Delete Account
+// Customer Delete Account
 app.delete('/api/auth/profile', async (req, res) => {
   try {
     const { email } = req.body;
@@ -233,7 +251,7 @@ app.delete('/api/auth/profile', async (req, res) => {
   }
 });
 
-// F. Admin Intelligence: Get All Customers
+// Fetch Customers List for Admin Dashboard
 app.get('/api/auth/customers', async (req, res) => {
   try {
     const users = await User.find({}, 'name email mobile address pincode createdAt').sort({ createdAt: -1 }).lean();
@@ -253,21 +271,21 @@ app.get('/api/auth/customers', async (req, res) => {
 });
 
 // =========================================================================
-// 🟢 2. ADMIN AUTH ROUTES (STRICTLY 'adminusers' COLLECTION)
+// 🟢 2. ADMIN USERS MANAGEMENT (STRICTLY 'adminusers' COLLECTION)
 // =========================================================================
 
-// Admin Sign Up
-app.post('/api/admin/auth/signup', async (req, res) => {
+// A. Register / Add Admin User (Saves directly into 'adminusers' table)
+app.post(['/api/auth/admin-users', '/api/admin/auth/signup', '/api/admin/auth/register'], async (req, res) => {
   try {
     const { name, email, password, mobile, role } = req.body;
     if (!name || !email || !password) {
-      return res.status(400).json({ message: 'Name, Email & Password required for Admin' });
+      return res.status(400).json({ message: 'Name, Email & Password are required' });
     }
 
     const cleanEmail = email.toLowerCase().trim();
     const existing = await AdminUser.findOne({ email: cleanEmail });
     if (existing) {
-      return res.status(400).json({ message: 'Admin with this email already exists!' });
+      return res.status(400).json({ message: 'Admin/Staff with this email already exists!' });
     }
 
     const newAdmin = new AdminUser({
@@ -286,39 +304,32 @@ app.post('/api/admin/auth/signup', async (req, res) => {
     );
 
     return res.status(201).json({
-      message: 'Admin account created successfully in adminusers table!',
+      message: 'Admin/Staff user registered in adminusers table!',
       token,
-      admin: { id: newAdmin._id, name: newAdmin.name, email: newAdmin.email, role: newAdmin.role }
+      admin: { id: newAdmin._id, name: newAdmin.name, email: newAdmin.email, role: newAdmin.role, mobile: newAdmin.mobile }
     });
   } catch (err) {
-    return res.status(500).json({ message: 'Admin signup error: ' + err.message });
+    return res.status(500).json({ message: 'Failed to register admin: ' + err.message });
   }
 });
 
-// Admin Login
-app.post('/api/admin/auth/login', async (req, res) => {
+// B. Fetch All Admin Users (Reads strictly from 'adminusers' table)
+app.get(['/api/auth/admin-users', '/api/admin/users'], async (req, res) => {
   try {
-    const { email, password } = req.body;
-    const cleanEmail = (email || '').toLowerCase().trim();
-    const admin = await AdminUser.findOne({ email: cleanEmail });
-
-    if (!admin || admin.password !== password) {
-      return res.status(401).json({ message: 'Invalid Admin Credentials' });
-    }
-
-    const token = jwt.sign(
-      { id: admin._id, role: admin.role },
-      process.env.JWT_SECRET || 'techstore_secret_jwt_key_2026',
-      { expiresIn: '30d' }
-    );
-
-    return res.status(200).json({
-      message: 'Admin login successful',
-      token,
-      admin: { id: admin._id, name: admin.name, email: admin.email, role: admin.role }
-    });
+    const adminUsers = await AdminUser.find({}, 'name email role mobile createdAt').sort({ createdAt: -1 });
+    return res.status(200).json(adminUsers);
   } catch (err) {
-    return res.status(500).json({ message: 'Admin login error: ' + err.message });
+    return res.status(500).json({ message: 'Failed to fetch admin users: ' + err.message });
+  }
+});
+
+// C. Delete Admin User
+app.delete('/api/auth/admin-users/:id', async (req, res) => {
+  try {
+    await AdminUser.findByIdAndDelete(req.params.id);
+    return res.status(200).json({ message: 'Admin user deleted successfully from adminusers table.' });
+  } catch (err) {
+    return res.status(500).json({ message: 'Failed to delete admin user: ' + err.message });
   }
 });
 
@@ -415,7 +426,7 @@ app.post('/api/products/bulk-upload', upload.any(), async (req, res) => {
   }
 });
 
-// Image Upload
+// Image Uploads
 app.post('/api/upload', upload.single('image'), (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ message: 'No file uploaded' });
