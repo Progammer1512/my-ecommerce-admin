@@ -7,7 +7,7 @@ const jwt = require('jsonwebtoken');
 require('dotenv').config();
 
 // ==========================================
-// 🗄️ SAFE MODEL RESOLVER WITH PRIORITY & MULTI-IMAGE SUPPORT
+// 🗄️ SAFE MODEL RESOLVER WITH VARIANTS & MULTI-IMAGE SUPPORT
 // ==========================================
 const resolveModel = (imported, fallbackName, schemaDef, collectionName) => {
   if (imported && typeof imported.find === 'function') return imported;
@@ -55,7 +55,7 @@ const Order = resolveModel(rawOrder, 'Order', {
   status: { type: String, default: 'Processing' }
 }, 'orders');
 
-// 4. Products Model (🟢 WITH PRIORITY & MULTI-IMAGE GALLERY SUPPORT)
+// 4. Products Model (🟢 WITH PRIORITY, MULTI-IMAGE & VARIANTS SUPPORT)
 let rawProd; try { rawProd = require('./models/Product'); } catch (e) {}
 const Product = resolveModel(rawProd, 'Product', {
   name: { type: String, required: true },
@@ -64,6 +64,15 @@ const Product = resolveModel(rawProd, 'Product', {
   description: { type: String, default: '' },
   image: { type: String, default: '' }, // Cover main image
   images: { type: [String], default: [] }, // 📸 Multi-angle gallery images
+  variants: {
+    type: [{
+      color: { type: String, default: '' },
+      size: { type: String, default: '' },
+      price: { type: Number, required: true },
+      stock: { type: Number, default: 0 }
+    }],
+    default: []
+  },
   countInStock: { type: Number, default: 10 },
   stock: { type: Number, default: 10 },
   rating: { type: Number, default: 4.5 },
@@ -440,7 +449,7 @@ app.delete('/api/auth/admin-users/:id', async (req, res) => {
 });
 
 // =========================================================================
-// 🟢 3. PRODUCTS MANAGEMENT (WITH MULTIPLE GALLERY IMAGES & PRIORITY SORT)
+// 🟢 3. PRODUCTS MANAGEMENT (WITH MULTI-IMAGES, VARIANTS & PRIORITY SORT)
 // =========================================================================
 
 app.get('/api/products', async (req, res) => {
@@ -455,7 +464,7 @@ app.get('/api/products', async (req, res) => {
 
 app.post('/api/products', async (req, res) => {
   try {
-    const { name, price, category, description, image, images, countInStock, stock, rating, priority } = req.body;
+    const { name, price, category, description, image, images, variants, countInStock, stock, rating, priority } = req.body;
     
     // Multi-image array normalization
     let galleryImages = [];
@@ -467,6 +476,17 @@ app.post('/api/products', async (req, res) => {
 
     const coverImage = (galleryImages.length > 0) ? galleryImages[0] : (image || '');
 
+    // Variants validation & parsing
+    let parsedVariants = [];
+    if (Array.isArray(variants)) {
+      parsedVariants = variants.map(v => ({
+        color: String(v.color || '').trim(),
+        size: String(v.size || '').trim().toUpperCase(),
+        price: Number(v.price) || Number(price) || 0,
+        stock: Number(v.stock) || 0
+      }));
+    }
+
     const newProd = new Product({
       name,
       price: Number(price) || 0,
@@ -474,6 +494,7 @@ app.post('/api/products', async (req, res) => {
       description: description || '',
       image: coverImage,
       images: galleryImages,
+      variants: parsedVariants,
       countInStock: Number(stock) || Number(countInStock) || 10,
       stock: Number(stock) || Number(countInStock) || 10,
       rating: Number(rating) || 4.5,
@@ -486,7 +507,7 @@ app.post('/api/products', async (req, res) => {
   }
 });
 
-// 🟢 BULLET-PROOF FULL PRODUCT & MULTI-IMAGE UPDATE
+// 🟢 BULLET-PROOF FULL PRODUCT, MULTI-IMAGE & VARIANTS UPDATE
 app.put('/api/products/:id', async (req, res) => {
   try {
     const updateData = { ...req.body };
@@ -512,6 +533,16 @@ app.put('/api/products/:id', async (req, res) => {
       }
     } else if (updateData.image && (!updateData.images || updateData.images.length === 0)) {
       updateData.images = [updateData.image];
+    }
+
+    // Variants handling
+    if (updateData.variants && Array.isArray(updateData.variants)) {
+      updateData.variants = updateData.variants.map(v => ({
+        color: String(v.color || '').trim(),
+        size: String(v.size || '').trim().toUpperCase(),
+        price: Number(v.price) || Number(updateData.price) || 0,
+        stock: Number(v.stock) || 0
+      }));
     }
 
     const updated = await Product.findByIdAndUpdate(
@@ -615,6 +646,7 @@ app.post('/api/products/bulk-upload', upload.any(), async (req, res) => {
           description: item.description || '',
           image: primaryImg,
           images: galleryImgs.filter(Boolean),
+          variants: item.variants ? (typeof item.variants === 'string' ? JSON.parse(item.variants) : item.variants) : [],
           countInStock: Number(item.stock) || Number(item.countInStock) || 10,
           stock: Number(item.stock) || Number(item.countInStock) || 10,
           rating: Number(item.rating) || 4.5,
@@ -835,7 +867,7 @@ app.delete('/api/coupons/:id', async (req, res) => {
 });
 
 app.get('/', (req, res) => {
-  res.send('🚀 TechStore Central Backend Active with Multi-Image Product Gallery & Priority Support!');
+  res.send('🚀 TechStore Central Backend Active with Multi-Image Gallery, Variants & Dynamic Pricing!');
 });
 
 // =========================================================================
