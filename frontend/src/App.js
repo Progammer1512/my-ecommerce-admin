@@ -89,6 +89,13 @@ function App() {
   const [productPriority, setProductPriority] = useState(100);
   const [rankInputs, setRankInputs] = useState({});
 
+  // 🟢 VARIANTS & CUSTOM PRICING STATE (Size/Color/Price/Stock)
+  const [variants, setVariants] = useState([]);
+  const [variantColor, setVariantColor] = useState('');
+  const [variantSize, setVariantSize] = useState('M');
+  const [variantPrice, setVariantPrice] = useState('');
+  const [variantStock, setVariantStock] = useState('');
+
   // 🟢 BANNER STATE (WITH PRIORITY RANK)
   const [bannerTitle, setBannerTitle] = useState('');
   const [bannerSubtitle, setBannerSubtitle] = useState('');
@@ -448,6 +455,33 @@ function App() {
     }
   };
 
+  // 🟢 ADD & REMOVE PRODUCT VARIANTS (Size, Color, Price, Stock)
+  const handleAddVariantOption = () => {
+    const parsedPrice = Number(variantPrice);
+    const parsedStock = Number(variantStock);
+
+    if (isNaN(parsedPrice) || parsedPrice <= 0) {
+      alert("⚠️ Please enter a valid price for this variant!");
+      return;
+    }
+
+    const newOption = {
+      color: variantColor.trim(),
+      size: variantSize.trim().toUpperCase(),
+      price: parsedPrice,
+      stock: isNaN(parsedStock) ? 0 : parsedStock
+    };
+
+    setVariants([...variants, newOption]);
+    setVariantColor('');
+    setVariantPrice('');
+    setVariantStock('');
+  };
+
+  const handleRemoveVariantOption = (indexToRemove) => {
+    setVariants(variants.filter((_, idx) => idx !== indexToRemove));
+  };
+
   const handleImageFileUpload = (e, targetSetter) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -599,6 +633,7 @@ function App() {
               description: rawDesc,
               image: String(rawImage).trim(),
               images: rawImages,
+              variants: [],
               stock: rawStock,
               countInStock: rawStock,
               priority: rawPriority
@@ -608,7 +643,7 @@ function App() {
           });
 
           await Promise.all(uploadPromises);
-          alert(`🎉 Successfully uploaded ${rows.length} products to MongoDB with Priorities & Images!`);
+          alert(`🎉 Successfully uploaded ${rows.length} products to MongoDB!`);
           setCsvFile(null);
           fetchData();
         } catch (error) {
@@ -663,7 +698,7 @@ function App() {
     }
   };
 
-  // 🟢 SAVE PRODUCT WITH MULTIPLE GALLERY IMAGES
+  // 🟢 SAVE PRODUCT WITH GALLERY IMAGES & VARIANTS
   const handleProductSubmit = async (e) => {
     e.preventDefault();
     const parsedStock = parseCleanStock(stock);
@@ -679,6 +714,7 @@ function App() {
       description: description || 'High quality store product.', 
       image: finalCoverImage,
       images: finalImagesList,
+      variants: variants || [],
       stock: parsedStock,
       countInStock: parsedStock,
       priority: parsedPriority
@@ -687,10 +723,10 @@ function App() {
     try {
       if (editingId) {
         await axios.put(`${BASE_URL}/api/products/${editingId}`, productData, getAuthHeader());
-        alert(`✅ Product '${name}' Updated with ${finalImagesList.length} Gallery Images!`);
+        alert(`✅ Product '${name}' Updated with ${variants.length} Variants & ${finalImagesList.length} Images!`);
       } else {
         await axios.post(`${BASE_URL}/api/products`, productData, getAuthHeader());
-        alert(`🎉 New Product Created with ${finalImagesList.length} Gallery Images!`);
+        alert(`🎉 New Product Created with ${variants.length} Variants!`);
       }
       resetProductForm();
       fetchData();
@@ -752,6 +788,7 @@ function App() {
 
     setImage(primaryImg);
     setImages(galleryImgs);
+    setVariants(Array.isArray(p.variants) ? p.variants : []);
     setProductPriority(p.priority !== undefined ? Number(p.priority) : 100);
     
     const fetchedStock = p.countInStock !== undefined ? p.countInStock : (p.stock !== undefined ? p.stock : 0);
@@ -777,6 +814,11 @@ function App() {
     setDescription('');
     setImage('');
     setImages([]);
+    setVariants([]);
+    setVariantColor('');
+    setVariantSize('M');
+    setVariantPrice('');
+    setVariantStock('');
     setNewImageUrlInput('');
     setStock(0);
     setProductPriority(100);
@@ -1065,7 +1107,7 @@ function App() {
                 className={`nav-link text-start fw-bold ${activeTab === 'products' ? 'active bg-warning text-dark' : 'text-white'}`} 
                 onClick={() => handleTabSelect('products')}
               >
-                <i className="bi bi-box-seam me-2"></i>Products & Multi-Images (Priority)
+                <i className="bi bi-box-seam me-2"></i>Products & Variants (PIM)
               </button>
             )}
 
@@ -1478,10 +1520,10 @@ function App() {
           </div>
         )}
 
-        {/* 🟢 PRODUCTS & STOCK TAB (WITH MULTIPLE GALLERY IMAGES & RANK CONTROL) */}
+        {/* 🟢 PRODUCTS & STOCK TAB (WITH MULTIPLE GALLERY IMAGES & CUSTOM PRICED VARIANTS) */}
         {activeTab === 'products' && hasTabAccess(userRole, 'products') && (
           <div>
-            <h3 className="fw-bold mb-4">Product Information & Multi-Image Gallery Manager</h3>
+            <h3 className="fw-bold mb-4">Product Information & Multi-Variant Pricing (PIM)</h3>
 
             <div className="card border-0 shadow-sm p-4 bg-white mb-4">
               <h5 className="fw-bold mb-3 text-success">
@@ -1515,7 +1557,7 @@ function App() {
                     
                     <div className="row mb-2">
                       <div className="col-6">
-                        <label className="form-label fw-semibold">Price (₹)</label>
+                        <label className="form-label fw-semibold">Base Price (₹)</label>
                         <input type="number" className="form-control" required value={price} onChange={(e) => setPrice(e.target.value)} />
                       </div>
                       <div className="col-6">
@@ -1548,7 +1590,7 @@ function App() {
 
                     <div className="row mb-2">
                       <div className="col-6">
-                        <label className="form-label fw-semibold">Stock Quantity</label>
+                        <label className="form-label fw-semibold">Total Base Stock</label>
                         <input 
                           type="number" 
                           className="form-control" 
@@ -1579,7 +1621,6 @@ function App() {
                         <span className="badge bg-primary">{images.length} Added</span>
                       </label>
                       
-                      {/* Image URL Add Field */}
                       <div className="input-group input-group-sm mb-2">
                         <input 
                           type="text" 
@@ -1593,7 +1634,6 @@ function App() {
 
                       <div className="text-center my-1 text-muted small fw-bold">-- OR UPLOAD FROM DEVICE --</div>
                       
-                      {/* Multi-file Upload Input */}
                       <input 
                         type="file" 
                         className="form-control form-control-sm mb-2" 
@@ -1602,7 +1642,6 @@ function App() {
                         onChange={handleMultipleImageUpload} 
                       />
 
-                      {/* Image Preview Gallery Grid */}
                       {images.length > 0 && (
                         <div className="d-flex flex-wrap gap-2 mt-2 pt-2 border-top">
                           {images.map((imgUrl, idx) => (
@@ -1630,8 +1669,108 @@ function App() {
                           ))}
                         </div>
                       )}
+                    </div>
+
+                    {/* 🟢 📏 PRODUCT VARIANTS & CUSTOM PRICING BUILDER */}
+                    <div className="mb-3 p-3 bg-light rounded border border-primary border-opacity-25">
+                      <div className="d-flex justify-content-between align-items-center mb-2">
+                        <label className="form-label fw-bold text-primary m-0">
+                          📏 Product Options & Different Prices (Size/Color)
+                        </label>
+                        <span className="badge bg-primary">{variants.length} Options Added</span>
+                      </div>
+
+                      <div className="row g-2 mb-2">
+                        <div className="col-3">
+                          <input 
+                            type="text" 
+                            className="form-control form-control-sm" 
+                            placeholder="Color (e.g. Blue)" 
+                            value={variantColor} 
+                            onChange={(e) => setVariantColor(e.target.value)} 
+                          />
+                        </div>
+                        <div className="col-3">
+                          <select 
+                            className="form-select form-select-sm fw-bold" 
+                            value={variantSize} 
+                            onChange={(e) => setVariantSize(e.target.value)}
+                          >
+                            <option value="S">S (Small)</option>
+                            <option value="M">M (Medium)</option>
+                            <option value="L">L (Large)</option>
+                            <option value="XL">XL (Extra Large)</option>
+                            <option value="XXL">XXL (Double XL)</option>
+                            <option value="3XL">3XL</option>
+                            <option value="FreeSize">Free Size</option>
+                          </select>
+                        </div>
+                        <div className="col-3">
+                          <input 
+                            type="number" 
+                            className="form-control form-control-sm fw-bold text-success" 
+                            placeholder="Price ₹" 
+                            value={variantPrice} 
+                            onChange={(e) => setVariantPrice(e.target.value)} 
+                          />
+                        </div>
+                        <div className="col-3">
+                          <input 
+                            type="number" 
+                            className="form-control form-control-sm" 
+                            placeholder="Stock" 
+                            value={variantStock} 
+                            onChange={(e) => setVariantStock(e.target.value)} 
+                          />
+                        </div>
+                      </div>
+
+                      <button 
+                        type="button" 
+                        className="btn btn-sm btn-outline-primary fw-bold w-100 py-1 shadow-sm"
+                        onClick={handleAddVariantOption}
+                      >
+                        + Add Size / Price Option
+                      </button>
+
+                      {variants.length > 0 && (
+                        <div className="table-responsive mt-3 border rounded bg-white">
+                          <table className="table table-sm table-bordered m-0 align-middle">
+                            <thead className="table-secondary text-nowrap">
+                              <tr>
+                                <th>Color</th>
+                                <th>Size</th>
+                                <th>Price (₹)</th>
+                                <th>Stock</th>
+                                <th className="text-center">Action</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {variants.map((v, idx) => (
+                                <tr key={idx}>
+                                  <td className="small">{v.color || 'Standard'}</td>
+                                  <td><span className="badge bg-dark">{v.size}</span></td>
+                                  <td className="text-success fw-bold">₹{v.price}</td>
+                                  <td>{v.stock}</td>
+                                  <td className="text-center">
+                                    <button 
+                                      type="button" 
+                                      className="btn btn-sm btn-danger py-0 px-2"
+                                      style={{ fontSize: '11px' }}
+                                      onClick={() => handleRemoveVariantOption(idx)}
+                                      title="Remove option"
+                                    >
+                                      ✕
+                                    </button>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
                       <small className="text-muted d-block mt-2" style={{ fontSize: '11px' }}>
-                        * First image is the main cover image shown in store list.
+                        * Customer website will dynamically show different prices when customer taps on S, M, L, XL or XXL!
                       </small>
                     </div>
 
@@ -1692,7 +1831,7 @@ function App() {
                           <th style={{ minWidth: '170px', whiteSpace: 'nowrap' }}>⭐ Set Rank</th>
                           <th style={{ minWidth: '180px', whiteSpace: 'nowrap' }}>Product Item</th>
                           <th style={{ minWidth: '120px', whiteSpace: 'nowrap' }}>Category</th>
-                          <th style={{ minWidth: '90px', whiteSpace: 'nowrap' }}>Price</th>
+                          <th style={{ minWidth: '90px', whiteSpace: 'nowrap' }}>Base Price</th>
                           <th style={{ minWidth: '130px', whiteSpace: 'nowrap' }}>Stock</th>
                           <th style={{ minWidth: '120px', whiteSpace: 'nowrap' }}>Actions</th>
                         </tr>
@@ -1713,6 +1852,7 @@ function App() {
                             const defaultRank = p.priority !== undefined ? p.priority : 100;
                             const currentInputRank = rankInputs[targetId] !== undefined ? rankInputs[targetId] : defaultRank;
                             const totalImgs = Array.isArray(p.images) && p.images.length > 0 ? p.images.length : (p.image ? 1 : 0);
+                            const totalVariants = Array.isArray(p.variants) ? p.variants.length : 0;
 
                             return (
                             <tr key={targetId} className={isSelected ? 'table-warning' : ''}>
@@ -1762,9 +1902,16 @@ function App() {
                                   />
                                   <div>
                                     <span>{p.name}</span>
-                                    <span className="badge bg-secondary d-block mt-1" style={{ fontSize: '9px', width: 'fit-content' }}>
-                                      📸 {totalImgs} {totalImgs === 1 ? 'Photo' : 'Photos'}
-                                    </span>
+                                    <div className="d-flex gap-1 mt-1">
+                                      <span className="badge bg-secondary" style={{ fontSize: '9px' }}>
+                                        📸 {totalImgs} Photos
+                                      </span>
+                                      {totalVariants > 0 && (
+                                        <span className="badge bg-primary" style={{ fontSize: '9px' }}>
+                                          📏 {totalVariants} Sizes
+                                        </span>
+                                      )}
+                                    </div>
                                   </div>
                                 </div>
                               </td>
