@@ -1,64 +1,17 @@
 const mongoose = require('mongoose');
 
-// 1. CUSTOMER SCHEMA (Shoppers wali website ke users ke liye -> 'users' collection)
+// Main Store Customer Schema (Only for store shoppers)
 const userSchema = new mongoose.Schema({
-  name: { 
-    type: String, 
-    required: [true, 'Name is required'],
-    trim: true 
-  },
-  email: { 
-    type: String, 
-    required: [true, 'Email is required'], 
-    unique: true,
-    lowercase: true,
-    trim: true 
-  },
-  password: { 
-    type: String, 
-    required: [true, 'Password is required'] 
-  },
-  role: { 
-    type: String, 
-    enum: ['Customer', 'customer'], 
-    default: 'Customer' 
-  }
-}, { collection: 'users', timestamps: true });
+  name: { type: String, required: true },
+  email: { type: String, required: true, unique: true, lowercase: true, trim: true },
+  password: { type: String, default: 'google_authenticated_user' },
+  mobile: { type: String, default: '' },
+  address: { type: String, default: '' },
+  pincode: { type: String, default: '' },
+  googleId: { type: String, default: '' },
+  avatar: { type: String, default: '' },
+  isVerified: { type: Boolean, default: true }
+}, { timestamps: true });
 
-// 2. ADMIN USER SCHEMA (Admin portal ke admins, managers & staff ke liye -> 'adminusers' collection)
-const adminUserSchema = new mongoose.Schema({
-  name: { 
-    type: String, 
-    required: [true, 'Name is required'],
-    trim: true 
-  },
-  email: { 
-    type: String, 
-    required: [true, 'Email is required'], 
-    unique: true,
-    lowercase: true,
-    trim: true 
-  },
-  password: { 
-    type: String, 
-    required: [true, 'Password is required'] 
-  },
-  role: { 
-    type: String, 
-    enum: [
-      'SuperAdmin', 'Staff', 'InventoryManager', 'Manager', 'Admin',
-      'superadmin', 'staff', 'inventorymanager', 'manager', 'admin'
-    ], 
-    default: 'Admin' 
-  },
-  mobile: { 
-    type: String, 
-    default: '' 
-  }
-}, { collection: 'adminusers', timestamps: true }); // 🟢 Forced to point strictly to 'adminusers'
-
-// Export both models correctly
-const User = mongoose.model('User', userSchema);
-const AdminUser = mongoose.model('AdminUser', adminUserSchema);
-
-module.exports = { User, AdminUser };
+// Strictly binds to 'users' collection in MongoDB
+module.exports = mongoose.models.User || mongoose.model('User', userSchema, 'users');

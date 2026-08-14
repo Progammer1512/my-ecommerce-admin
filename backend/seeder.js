@@ -1,5 +1,5 @@
 const mongoose = require('mongoose');
-const User = require('./models/User');
+const User = require('./models/AdminUser');
 const connectDB = require('./config/db');
 require('dotenv').config();
 
