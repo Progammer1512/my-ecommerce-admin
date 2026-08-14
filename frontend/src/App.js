@@ -76,13 +76,15 @@ function App() {
 
   const [coupons, setCoupons] = useState([]);
 
-  // 🟢 PRODUCT STATE & INLINE RANK INPUT TRACKER
+  // 🟢 PRODUCT STATE & MULTIPLE IMAGES GALLERY
   const [editingId, setEditingId] = useState(null);
   const [name, setName] = useState('');
   const [price, setPrice] = useState('');
   const [category, setCategory] = useState('Electronics');
   const [description, setDescription] = useState('');
-  const [image, setImage] = useState('');
+  const [image, setImage] = useState(''); // Primary Cover
+  const [images, setImages] = useState([]); // 📸 Gallery Array
+  const [newImageUrlInput, setNewImageUrlInput] = useState('');
   const [stock, setStock] = useState(0);
   const [productPriority, setProductPriority] = useState(100);
   const [rankInputs, setRankInputs] = useState({});
@@ -392,6 +394,60 @@ function App() {
     { name: 'Sun', Revenue: 3490, Orders: 4 },
   ];
 
+  // 🟢 COMPRESS & UPLOAD MULTIPLE IMAGES
+  const handleMultipleImageUpload = (e) => {
+    const files = Array.from(e.target.files);
+    if (!files.length) return;
+
+    files.forEach((file) => {
+      if (file.size > 5 * 1024 * 1024) {
+        alert(`File ${file.name} is too large (>5MB).`);
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = (event) => {
+        const img = new Image();
+        img.src = event.target.result;
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          const MAX_WIDTH = 1000;
+          const scale = MAX_WIDTH / img.width;
+          
+          canvas.width = scale < 1 ? MAX_WIDTH : img.width;
+          canvas.height = scale < 1 ? img.height * scale : img.height;
+
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+          
+          const compressedBase64 = canvas.toDataURL('image/jpeg', 0.7);
+          
+          setImages((prev) => [...prev, compressedBase64]);
+          if (!image) setImage(compressedBase64);
+        };
+      };
+    });
+  };
+
+  const handleAddImageUrl = () => {
+    if (!newImageUrlInput.trim()) return;
+    const url = newImageUrlInput.trim();
+    setImages((prev) => [...prev, url]);
+    if (!image) setImage(url);
+    setNewImageUrlInput('');
+  };
+
+  const handleRemoveImage = (indexToRemove) => {
+    const updated = images.filter((_, idx) => idx !== indexToRemove);
+    setImages(updated);
+    if (updated.length > 0) {
+      setImage(updated[0]);
+    } else {
+      setImage('');
+    }
+  };
+
   const handleImageFileUpload = (e, targetSetter) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -532,6 +588,7 @@ function App() {
               : `High quality verified ${rawCategory} product.`;
 
             const rawImage = cleanRow.image || 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=500';
+            const rawImages = cleanRow.images ? cleanRow.images.split('|') : [rawImage];
             const rawStock = parseCleanStock(cleanRow.stock || cleanRow.countinstock || cleanRow.quantity || cleanRow.qty);
             const rawPriority = cleanRow.priority ? Number(cleanRow.priority) : 100;
 
@@ -541,6 +598,7 @@ function App() {
               category: String(rawCategory).trim(),
               description: rawDesc,
               image: String(rawImage).trim(),
+              images: rawImages,
               stock: rawStock,
               countInStock: rawStock,
               priority: rawPriority
@@ -550,7 +608,7 @@ function App() {
           });
 
           await Promise.all(uploadPromises);
-          alert(`🎉 Successfully uploaded ${rows.length} products to MongoDB with Priorities!`);
+          alert(`🎉 Successfully uploaded ${rows.length} products to MongoDB with Priorities & Images!`);
           setCsvFile(null);
           fetchData();
         } catch (error) {
@@ -605,18 +663,22 @@ function App() {
     }
   };
 
-  // 🟢 SAVE PRODUCT VIA MODAL
+  // 🟢 SAVE PRODUCT WITH MULTIPLE GALLERY IMAGES
   const handleProductSubmit = async (e) => {
     e.preventDefault();
     const parsedStock = parseCleanStock(stock);
     const parsedPriority = Number(productPriority) || 100;
     
+    const finalImagesList = images.length > 0 ? images : (image ? [image] : []);
+    const finalCoverImage = finalImagesList.length > 0 ? finalImagesList[0] : (image || '');
+
     const productData = { 
       name, 
       price: parseCleanStock(price), 
       category, 
       description: description || 'High quality store product.', 
-      image, 
+      image: finalCoverImage,
+      images: finalImagesList,
       stock: parsedStock,
       countInStock: parsedStock,
       priority: parsedPriority
@@ -625,10 +687,10 @@ function App() {
     try {
       if (editingId) {
         await axios.put(`${BASE_URL}/api/products/${editingId}`, productData, getAuthHeader());
-        alert(`✅ Product '${name}' Updated! Display Rank: #${parsedPriority}`);
+        alert(`✅ Product '${name}' Updated with ${finalImagesList.length} Gallery Images!`);
       } else {
         await axios.post(`${BASE_URL}/api/products`, productData, getAuthHeader());
-        alert(`🎉 New Product Created with Display Rank #${parsedPriority}!`);
+        alert(`🎉 New Product Created with ${finalImagesList.length} Gallery Images!`);
       }
       resetProductForm();
       fetchData();
@@ -637,7 +699,7 @@ function App() {
     }
   };
 
-  // 🟢 1-CLICK SAVE PRODUCT RANK DIRECTLY TO MONGODB (INSTANT LIVE UPDATE)
+  // 🟢 1-CLICK SAVE PRODUCT RANK DIRECTLY TO MONGODB
   const handleSaveSingleProductRank = async (prod, rankValue) => {
     const targetId = prod._id || prod.id;
     const numRank = parseInt(rankValue, 10);
@@ -650,7 +712,6 @@ function App() {
     try {
       const authConfig = getAuthHeader();
       
-      // Call dedicated priority route with fallback to full update
       let res;
       try {
         res = await axios.put(`${BASE_URL}/api/products/${targetId}/priority`, { priority: numRank }, authConfig);
@@ -683,7 +744,14 @@ function App() {
     setPrice(p.price);
     setCategory(p.category);
     setDescription(p.description);
-    setImage(getCleanImageUrl(p.image));
+    
+    const primaryImg = getCleanImageUrl(p.image);
+    const galleryImgs = Array.isArray(p.images) && p.images.length > 0 
+      ? p.images.map(getCleanImageUrl) 
+      : (primaryImg ? [primaryImg] : []);
+
+    setImage(primaryImg);
+    setImages(galleryImgs);
     setProductPriority(p.priority !== undefined ? Number(p.priority) : 100);
     
     const fetchedStock = p.countInStock !== undefined ? p.countInStock : (p.stock !== undefined ? p.stock : 0);
@@ -708,6 +776,8 @@ function App() {
     setCategory('Electronics');
     setDescription('');
     setImage('');
+    setImages([]);
+    setNewImageUrlInput('');
     setStock(0);
     setProductPriority(100);
     setShowCustomCategory(false);
@@ -878,7 +948,7 @@ function App() {
                     <select 
                       className="form-select fw-bold text-primary" 
                       value={adminFormData.role} 
-                      onChange={(e) => setAdminFormData({...adminFormData, role: e.target.value})}
+                      onChange={(e) => setAdminFormData({...adminFormData, role: e.target.value})} 
                     >
                       <option value="SuperAdmin">SuperAdmin (Full Access)</option>
                       <option value="InventoryManager">InventoryManager (Products & Stock)</option>
@@ -995,7 +1065,7 @@ function App() {
                 className={`nav-link text-start fw-bold ${activeTab === 'products' ? 'active bg-warning text-dark' : 'text-white'}`} 
                 onClick={() => handleTabSelect('products')}
               >
-                <i className="bi bi-box-seam me-2"></i>Products & Stock (Priority)
+                <i className="bi bi-box-seam me-2"></i>Products & Multi-Images (Priority)
               </button>
             )}
 
@@ -1408,10 +1478,10 @@ function App() {
           </div>
         )}
 
-        {/* 🟢 PRODUCTS & STOCK TAB (WITH INLINE 1-CLICK SAVE RANK BUTTON) */}
+        {/* 🟢 PRODUCTS & STOCK TAB (WITH MULTIPLE GALLERY IMAGES & RANK CONTROL) */}
         {activeTab === 'products' && hasTabAccess(userRole, 'products') && (
           <div>
-            <h3 className="fw-bold mb-4">Product Information & Inventory Priority (PIM)</h3>
+            <h3 className="fw-bold mb-4">Product Information & Multi-Image Gallery Manager</h3>
 
             <div className="card border-0 shadow-sm p-4 bg-white mb-4">
               <h5 className="fw-bold mb-3 text-success">
@@ -1429,7 +1499,7 @@ function App() {
                 </button>
               </form>
               <small className="text-muted mt-2 d-block">
-                CSV Headers Required: <code>name, price, category, description, image, stock, priority</code>
+                CSV Headers: <code>name, price, category, description, image, images (pipe | separated), stock, priority</code>
               </small>
             </div>
 
@@ -1502,23 +1572,67 @@ function App() {
                       </div>
                     </div>
 
-                    <div className="mb-2">
-                      <label className="form-label fw-semibold">Image URL</label>
-                      <input 
-                        type="text" 
-                        className="form-control mb-1" 
-                        value={image} 
-                        onChange={(e) => setImage(e.target.value)} 
-                        placeholder="https://..." 
-                      />
-                      <div className="text-center my-1 text-muted small fw-bold">-- OR --</div>
-                      <label className="form-label fw-semibold">Upload Image from Device</label>
+                    {/* 📸 MULTIPLE GALLERY IMAGES SECTION */}
+                    <div className="mb-3 p-3 bg-light rounded border">
+                      <label className="form-label fw-bold text-primary d-flex align-items-center justify-content-between m-0 mb-2">
+                        <span>📸 Product Images (Front, Back, Sides)</span>
+                        <span className="badge bg-primary">{images.length} Added</span>
+                      </label>
+                      
+                      {/* Image URL Add Field */}
+                      <div className="input-group input-group-sm mb-2">
+                        <input 
+                          type="text" 
+                          className="form-control" 
+                          placeholder="Paste image URL (https://...)" 
+                          value={newImageUrlInput} 
+                          onChange={(e) => setNewImageUrlInput(e.target.value)} 
+                        />
+                        <button type="button" className="btn btn-primary fw-bold" onClick={handleAddImageUrl}>+ Add URL</button>
+                      </div>
+
+                      <div className="text-center my-1 text-muted small fw-bold">-- OR UPLOAD FROM DEVICE --</div>
+                      
+                      {/* Multi-file Upload Input */}
                       <input 
                         type="file" 
-                        className="form-control" 
+                        className="form-control form-control-sm mb-2" 
                         accept="image/*" 
-                        onChange={(e) => handleImageFileUpload(e, setImage)} 
+                        multiple 
+                        onChange={handleMultipleImageUpload} 
                       />
+
+                      {/* Image Preview Gallery Grid */}
+                      {images.length > 0 && (
+                        <div className="d-flex flex-wrap gap-2 mt-2 pt-2 border-top">
+                          {images.map((imgUrl, idx) => (
+                            <div key={idx} className="position-relative border rounded p-1 bg-white shadow-sm" style={{ width: '65px', height: '65px' }}>
+                              <img 
+                                src={getCleanImageUrl(imgUrl)} 
+                                alt={`Angle ${idx + 1}`} 
+                                style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '4px' }} 
+                              />
+                              {idx === 0 && (
+                                <span className="position-absolute bottom-0 start-0 badge bg-dark text-warning" style={{ fontSize: '8px', transform: 'scale(0.8)' }}>
+                                  Cover
+                                </span>
+                              )}
+                              <button 
+                                type="button" 
+                                className="position-absolute top-0 end-0 btn btn-danger btn-sm p-0 rounded-circle d-flex align-items-center justify-content-center"
+                                style={{ width: '18px', height: '18px', fontSize: '10px', transform: 'translate(30%, -30%)' }}
+                                onClick={() => handleRemoveImage(idx)}
+                                title="Remove photo"
+                              >
+                                ✕
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      <small className="text-muted d-block mt-2" style={{ fontSize: '11px' }}>
+                        * First image is the main cover image shown in store list.
+                      </small>
                     </div>
 
                     <div className="mb-3">
@@ -1598,6 +1712,7 @@ function App() {
                             const isSelected = selectedProductIds.includes(targetId);
                             const defaultRank = p.priority !== undefined ? p.priority : 100;
                             const currentInputRank = rankInputs[targetId] !== undefined ? rankInputs[targetId] : defaultRank;
+                            const totalImgs = Array.isArray(p.images) && p.images.length > 0 ? p.images.length : (p.image ? 1 : 0);
 
                             return (
                             <tr key={targetId} className={isSelected ? 'table-warning' : ''}>
@@ -1612,7 +1727,6 @@ function App() {
                                 </td>
                               )}
                               
-                              {/* 🟢 DIRECT INLINE RANK NUMBER INPUT + 💾 SAVE RANK BUTTON */}
                               <td style={{ whiteSpace: 'nowrap' }}>
                                 <div className="d-flex align-items-center gap-1">
                                   <input 
@@ -1636,7 +1750,24 @@ function App() {
                                 </div>
                               </td>
 
-                              <td className="fw-bold small" style={{ whiteSpace: 'nowrap' }}>{p.name}</td>
+                              <td className="fw-bold small" style={{ whiteSpace: 'nowrap' }}>
+                                <div className="d-flex align-items-center gap-2">
+                                  <img 
+                                    src={getCleanImageUrl(p.image) || 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=100'} 
+                                    alt={p.name} 
+                                    width="36" 
+                                    height="36" 
+                                    className="rounded border" 
+                                    style={{ objectFit: 'cover' }} 
+                                  />
+                                  <div>
+                                    <span>{p.name}</span>
+                                    <span className="badge bg-secondary d-block mt-1" style={{ fontSize: '9px', width: 'fit-content' }}>
+                                      📸 {totalImgs} {totalImgs === 1 ? 'Photo' : 'Photos'}
+                                    </span>
+                                  </div>
+                                </div>
+                              </td>
                               <td style={{ whiteSpace: 'nowrap' }}><span className="badge bg-secondary">{p.category}</span></td>
                               <td className="text-success fw-bold" style={{ whiteSpace: 'nowrap' }}>₹{p.price}</td>
                               <td style={{ whiteSpace: 'nowrap' }}>
