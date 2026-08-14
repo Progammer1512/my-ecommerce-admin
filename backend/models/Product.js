@@ -29,6 +29,21 @@ const productSchema = new mongoose.Schema({
         required: true,
         default: 0,
         min: 0
+    },
+    countInStock: {
+        type: Number,
+        default: 10,
+        min: 0
+    },
+    rating: {
+        type: Number,
+        default: 4.5
+    },
+    // 🟢 Display Ranking (1 is top priority, 2 is second...)
+    priority: {
+        type: Number,
+        default: 100,
+        min: 1
     }
 }, { timestamps: true });
 
