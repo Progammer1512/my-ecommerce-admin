@@ -471,15 +471,62 @@ app.post('/api/products', async (req, res) => {
   }
 });
 
+// 🟢 BULLET-PROOF FULL PRODUCT & PRIORITY UPDATE (INSTANT PERMANENT SAVE IN MONGODB)
 app.put('/api/products/:id', async (req, res) => {
   try {
-    if (req.body.priority !== undefined) {
-      req.body.priority = Number(req.body.priority) || 100;
+    const updateData = { ...req.body };
+
+    // Explicitly parse numeric priority / rank
+    if (updateData.priority !== undefined && updateData.priority !== null && updateData.priority !== '') {
+      updateData.priority = Number(updateData.priority);
     }
-    const updated = await Product.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    if (updateData.price !== undefined) {
+      updateData.price = Number(updateData.price);
+    }
+    if (updateData.stock !== undefined || updateData.countInStock !== undefined) {
+      const s = Number(updateData.stock !== undefined ? updateData.stock : updateData.countInStock) || 0;
+      updateData.stock = s;
+      updateData.countInStock = s;
+    }
+
+    const updated = await Product.findByIdAndUpdate(
+      req.params.id,
+      { $set: updateData },
+      { new: true, runValidators: true }
+    );
+
+    if (!updated) {
+      return res.status(404).json({ message: 'Product not found in database' });
+    }
+
     return res.status(200).json(updated);
   } catch (err) {
-    return res.status(500).json({ message: 'Product update failed' });
+    console.error('Product update error:', err.message);
+    return res.status(500).json({ message: 'Product update failed: ' + err.message });
+  }
+});
+
+// 🟢 SUPER-FAST DEDICATED PRIORITY UPDATE ENDPOINT
+app.put('/api/products/:id/priority', async (req, res) => {
+  try {
+    const priorityVal = Number(req.body.priority);
+    if (isNaN(priorityVal)) {
+      return res.status(400).json({ message: 'Invalid priority number' });
+    }
+
+    const updated = await Product.findByIdAndUpdate(
+      req.params.id,
+      { $set: { priority: priorityVal } },
+      { new: true }
+    );
+
+    if (!updated) {
+      return res.status(404).json({ message: 'Product not found' });
+    }
+
+    return res.status(200).json(updated);
+  } catch (err) {
+    return res.status(500).json({ message: 'Failed to update priority: ' + err.message });
   }
 });
 
@@ -490,7 +537,7 @@ app.put('/api/products/priority/batch', async (req, res) => {
     if (Array.isArray(priorities)) {
       for (const item of priorities) {
         if (item.id) {
-          await Product.findByIdAndUpdate(item.id, { priority: Number(item.priority) || 100 });
+          await Product.findByIdAndUpdate(item.id, { $set: { priority: Number(item.priority) || 100 } });
         }
       }
     }
@@ -608,10 +655,11 @@ app.post('/api/banners', async (req, res) => {
 
 app.put('/api/banners/:id', async (req, res) => {
   try {
-    if (req.body.priority !== undefined) {
-      req.body.priority = Number(req.body.priority) || 100;
+    const updateData = { ...req.body };
+    if (updateData.priority !== undefined && updateData.priority !== null && updateData.priority !== '') {
+      updateData.priority = Number(updateData.priority);
     }
-    await Banner.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    await Banner.findByIdAndUpdate(req.params.id, { $set: updateData }, { new: true });
     const all = await Banner.find({}).sort({ priority: 1, createdAt: -1 });
     return res.status(200).json({ message: 'Banner updated', banners: all });
   } catch (err) {
