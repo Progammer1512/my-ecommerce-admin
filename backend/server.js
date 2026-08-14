@@ -7,7 +7,7 @@ const jwt = require('jsonwebtoken');
 require('dotenv').config();
 
 // ==========================================
-// 🗄️ SAFE MODEL RESOLVER (NO 500 ERRORS)
+// 🗄️ SAFE MODEL RESOLVER WITH PRIORITY SUPPORT
 // ==========================================
 const resolveModel = (imported, fallbackName, schemaDef, collectionName) => {
   if (imported && typeof imported.find === 'function') return imported;
@@ -17,7 +17,7 @@ const resolveModel = (imported, fallbackName, schemaDef, collectionName) => {
   return mongoose.model(fallbackName, schema);
 };
 
-// 1. Customer User Model ('users' Collection)
+// 1. Customer User Model
 let rawUser; try { rawUser = require('./models/User'); } catch (e) {}
 const User = resolveModel(rawUser, 'User', {
   name: { type: String, required: true },
@@ -31,7 +31,7 @@ const User = resolveModel(rawUser, 'User', {
   isVerified: { type: Boolean, default: true }
 }, 'users');
 
-// 2. Admin User Model ('adminusers' Collection)
+// 2. Admin User Model
 let rawAdmin; try { rawAdmin = require('./models/AdminUser'); } catch (e) {}
 const AdminUser = resolveModel(rawAdmin, 'AdminUser', {
   name: { type: String, required: true },
@@ -41,7 +41,7 @@ const AdminUser = resolveModel(rawAdmin, 'AdminUser', {
   mobile: { type: String, default: '' }
 }, 'adminusers');
 
-// 3. Orders Model ('orders' Collection)
+// 3. Orders Model
 let rawOrder; 
 try { rawOrder = require('./models/Order'); } catch (e) {
   try { rawOrder = require('./models/orderModel'); } catch (err) {}
@@ -55,7 +55,7 @@ const Order = resolveModel(rawOrder, 'Order', {
   status: { type: String, default: 'Processing' }
 }, 'orders');
 
-// 4. Products Model
+// 4. Products Model (🟢 WITH PRIORITY)
 let rawProd; try { rawProd = require('./models/Product'); } catch (e) {}
 const Product = resolveModel(rawProd, 'Product', {
   name: { type: String, required: true },
@@ -64,10 +64,11 @@ const Product = resolveModel(rawProd, 'Product', {
   description: { type: String, default: '' },
   image: { type: String, default: '' },
   countInStock: { type: Number, default: 10 },
-  rating: { type: Number, default: 4.5 }
+  rating: { type: Number, default: 4.5 },
+  priority: { type: Number, default: 100 } // 🟢 1 comes first, 2 second...
 }, 'products');
 
-// 5. Auxiliary Tracking Models (Cart & Wishlist)
+// 5. Tracking & Auxiliary Models
 let rawCart; try { rawCart = require('./models/AbandonedCart'); } catch (e) {}
 const AbandonedCart = resolveModel(rawCart, 'AbandonedCart', {
   userEmail: { type: String, required: true, lowercase: true, trim: true },
@@ -84,8 +85,16 @@ const WishlistRecord = resolveModel(rawWish, 'WishlistRecord', {
   wishlistItems: { type: Array, default: [] }
 }, 'wishlistrecords');
 
+// 6. Banners Model (🟢 WITH PRIORITY)
 let rawBanner; try { rawBanner = require('./models/bannerModel'); } catch (e) {}
-const Banner = resolveModel(rawBanner, 'Banner', { title: String, subtitle: String, badge: String, img: String, bg: String }, 'banners');
+const Banner = resolveModel(rawBanner, 'Banner', {
+  title: String,
+  subtitle: String,
+  badge: String,
+  img: String,
+  bg: String,
+  priority: { type: Number, default: 100 } // 🟢 1 comes first
+}, 'banners');
 
 let rawReview; try { rawReview = require('./models/reviewModel'); } catch (e) {}
 const Review = resolveModel(rawReview, 'Review', { orderId: String, customerName: String, customerEmail: String, rating: Number, comment: String, items: Array, date: String }, 'reviews');
@@ -95,7 +104,6 @@ const Coupon = resolveModel(rawCoupon, 'Coupon', { code: { type: String, require
 
 const app = express();
 
-// Global Middlewares
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
@@ -105,10 +113,9 @@ const storage = multer.memoryStorage();
 const upload = multer({ storage, limits: { fileSize: 10 * 1024 * 1024 } });
 
 // =========================================================================
-// 🟢 1. CUSTOMER AUTH ROUTES ('users' COLLECTION)
+// 🟢 1. CUSTOMER AUTH & SYNC ROUTES
 // =========================================================================
 
-// Google Login
 app.post('/api/auth/google', async (req, res) => {
   try {
     const { name, email, googleId, avatar } = req.body;
@@ -152,7 +159,6 @@ app.post('/api/auth/google', async (req, res) => {
   }
 });
 
-// Signup
 app.post('/api/auth/signup', async (req, res) => {
   try {
     const { name, email, password, mobile, address, pincode } = req.body;
@@ -188,7 +194,6 @@ app.post('/api/auth/signup', async (req, res) => {
   }
 });
 
-// Login (Admin & Customer Smart Routing)
 app.post('/api/auth/login', async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -196,7 +201,6 @@ app.post('/api/auth/login', async (req, res) => {
 
     const cleanEmail = email.toLowerCase().trim();
 
-    // Check in 'adminusers' first
     const admin = await AdminUser.findOne({ email: cleanEmail });
     if (admin && admin.password === password) {
       const token = jwt.sign(
@@ -212,7 +216,6 @@ app.post('/api/auth/login', async (req, res) => {
       });
     }
 
-    // Check in 'users'
     const user = await User.findOne({ email: cleanEmail });
     if (!user) return res.status(404).json({ message: 'User not found. Please Sign Up.' });
 
@@ -243,11 +246,7 @@ app.post('/api/auth/login', async (req, res) => {
   }
 });
 
-// =========================================================================
-// 🟢 2. REAL-TIME WISHLIST & CART PERSISTENCE APIS
-// =========================================================================
-
-// Fetch Wishlist
+// Real-time Wishlist & Cart Endpoints
 app.get(['/api/auth/wishlist', '/api/wishlist'], async (req, res) => {
   try {
     const email = (req.query.email || '').toLowerCase().trim();
@@ -259,11 +258,10 @@ app.get(['/api/auth/wishlist', '/api/wishlist'], async (req, res) => {
   }
 });
 
-// Save / Sync Wishlist
 app.post(['/api/auth/wishlist', '/api/wishlist'], async (req, res) => {
   try {
     const { email, wishlist, name, mobile } = req.body;
-    if (!email) return res.status(400).json({ message: 'Email required for wishlist sync' });
+    if (!email) return res.status(400).json({ message: 'Email required' });
     const cleanEmail = email.toLowerCase().trim();
 
     await WishlistRecord.findOneAndUpdate(
@@ -277,7 +275,6 @@ app.post(['/api/auth/wishlist', '/api/wishlist'], async (req, res) => {
   }
 });
 
-// Fetch Cart
 app.get(['/api/auth/cart', '/api/cart'], async (req, res) => {
   try {
     const email = (req.query.email || '').toLowerCase().trim();
@@ -289,11 +286,10 @@ app.get(['/api/auth/cart', '/api/cart'], async (req, res) => {
   }
 });
 
-// Save / Sync Cart
 app.post(['/api/auth/cart', '/api/cart'], async (req, res) => {
   try {
     const { email, cart, name, mobile } = req.body;
-    if (!email) return res.status(400).json({ message: 'Email required for cart sync' });
+    if (!email) return res.status(400).json({ message: 'Email required' });
     const cleanEmail = email.toLowerCase().trim();
 
     await AbandonedCart.findOneAndUpdate(
@@ -307,7 +303,6 @@ app.post(['/api/auth/cart', '/api/cart'], async (req, res) => {
   }
 });
 
-// Profile & Multi-Attribute Sync
 app.put('/api/auth/profile', async (req, res) => {
   try {
     const { email, name, mobile, address, pincode, cart, wishlist } = req.body;
@@ -364,7 +359,6 @@ app.delete('/api/auth/profile', async (req, res) => {
   }
 });
 
-// Fetch All Store Customers for Admin Intelligence
 app.get(['/api/auth/customers', '/api/customers', '/api/admin/customers', '/api/users'], async (req, res) => {
   try {
     const users = await User.find({}, 'name email mobile address pincode createdAt').sort({ createdAt: -1 }).lean();
@@ -384,10 +378,9 @@ app.get(['/api/auth/customers', '/api/customers', '/api/admin/customers', '/api/
 });
 
 // =========================================================================
-// 🟢 3. ADMIN USERS MANAGEMENT ('adminusers' COLLECTION)
+// 🟢 2. ADMIN USERS MANAGEMENT ('adminusers' COLLECTION)
 // =========================================================================
 
-// Register Admin User
 app.post(['/api/auth/admin-users', '/api/admin/auth/signup', '/api/admin/auth/register'], async (req, res) => {
   try {
     const { name, email, password, mobile, role } = req.body;
@@ -426,7 +419,6 @@ app.post(['/api/auth/admin-users', '/api/admin/auth/signup', '/api/admin/auth/re
   }
 });
 
-// Fetch All Admin Users
 app.get(['/api/auth/admin-users', '/api/admin/users'], async (req, res) => {
   try {
     const adminUsers = await AdminUser.find({}, 'name email role mobile createdAt').sort({ createdAt: -1 });
@@ -436,70 +428,23 @@ app.get(['/api/auth/admin-users', '/api/admin/users'], async (req, res) => {
   }
 });
 
-// Delete Admin User
 app.delete('/api/auth/admin-users/:id', async (req, res) => {
   try {
     await AdminUser.findByIdAndDelete(req.params.id);
-    return res.status(200).json({ message: 'Admin user deleted successfully from adminusers table.' });
+    return res.status(200).json({ message: 'Admin user deleted successfully.' });
   } catch (err) {
     return res.status(500).json({ message: 'Failed to delete admin user: ' + err.message });
   }
 });
 
 // =========================================================================
-// 🟢 4. ORDERS APIS
-// =========================================================================
-
-app.get('/api/orders', async (req, res) => {
-  try {
-    const orders = await Order.find({}).sort({ createdAt: -1 });
-    return res.status(200).json(orders);
-  } catch (err) {
-    console.error("Order fetch error:", err);
-    return res.status(500).json({ message: 'Failed to fetch orders: ' + err.message });
-  }
-});
-
-app.post('/api/orders', async (req, res) => {
-  try {
-    const newOrder = new Order(req.body);
-    const saved = await newOrder.save();
-    return res.status(201).json({ message: 'Order placed successfully', order: saved });
-  } catch (err) {
-    return res.status(500).json({ message: 'Order placement failed: ' + err.message });
-  }
-});
-
-app.put('/api/orders/:id/status', async (req, res) => {
-  try {
-    const updated = await Order.findByIdAndUpdate(req.params.id, { status: req.body.status }, { new: true });
-    return res.status(200).json(updated);
-  } catch (err) {
-    return res.status(500).json({ message: 'Status update failed' });
-  }
-});
-
-app.put('/api/orders/:id/return', async (req, res) => {
-  try {
-    const { returnType, reason, comments } = req.body;
-    const updated = await Order.findByIdAndUpdate(
-      req.params.id,
-      { status: `Return Requested (${returnType}): ${reason} - ${comments || ''}` },
-      { new: true }
-    );
-    return res.status(200).json(updated);
-  } catch (err) {
-    return res.status(500).json({ message: 'Return request error' });
-  }
-});
-
-// =========================================================================
-// 🟢 5. PRODUCTS & BULK UPLOAD APIS
+// 🟢 3. PRODUCTS MANAGEMENT (SORTED BY PRIORITY ASCENDING: 1, 2, 3...)
 // =========================================================================
 
 app.get('/api/products', async (req, res) => {
   try {
-    const products = await Product.find({}).sort({ createdAt: -1 });
+    // 🟢 Priority 1 comes first, then Priority 2... fallback to latest created
+    const products = await Product.find({}).sort({ priority: 1, createdAt: -1 });
     return res.status(200).json(products);
   } catch (err) {
     return res.status(500).json({ message: 'Failed to fetch products' });
@@ -508,7 +453,7 @@ app.get('/api/products', async (req, res) => {
 
 app.post('/api/products', async (req, res) => {
   try {
-    const { name, price, category, description, image, countInStock, stock, rating } = req.body;
+    const { name, price, category, description, image, countInStock, stock, rating, priority } = req.body;
     const newProd = new Product({
       name,
       price: Number(price) || 0,
@@ -516,7 +461,8 @@ app.post('/api/products', async (req, res) => {
       description: description || '',
       image: image || '',
       countInStock: Number(stock) || Number(countInStock) || 10,
-      rating: Number(rating) || 4.5
+      rating: Number(rating) || 4.5,
+      priority: priority !== undefined && priority !== '' ? Number(priority) : 100
     });
     await newProd.save();
     return res.status(201).json(newProd);
@@ -527,10 +473,31 @@ app.post('/api/products', async (req, res) => {
 
 app.put('/api/products/:id', async (req, res) => {
   try {
+    if (req.body.priority !== undefined) {
+      req.body.priority = Number(req.body.priority) || 100;
+    }
     const updated = await Product.findByIdAndUpdate(req.params.id, req.body, { new: true });
     return res.status(200).json(updated);
   } catch (err) {
     return res.status(500).json({ message: 'Product update failed' });
+  }
+});
+
+// 🟢 Quick Batch Update Product Priorities API
+app.put('/api/products/priority/batch', async (req, res) => {
+  try {
+    const { priorities } = req.body; // Array of { id, priority }
+    if (Array.isArray(priorities)) {
+      for (const item of priorities) {
+        if (item.id) {
+          await Product.findByIdAndUpdate(item.id, { priority: Number(item.priority) || 100 });
+        }
+      }
+    }
+    const all = await Product.find({}).sort({ priority: 1, createdAt: -1 });
+    return res.status(200).json({ message: 'Product priorities updated successfully!', products: all });
+  } catch (err) {
+    return res.status(500).json({ message: 'Failed to update priorities: ' + err.message });
   }
 });
 
@@ -573,12 +540,13 @@ app.post('/api/products/bulk-upload', upload.any(), async (req, res) => {
           description: item.description || '',
           image: item.image || item.imageUrl || '',
           countInStock: Number(item.stock) || Number(item.countInStock) || 10,
-          rating: Number(item.rating) || 4.5
+          rating: Number(item.rating) || 4.5,
+          priority: item.priority !== undefined ? Number(item.priority) : 100
         });
         count++;
       }
     }
-    const all = await Product.find({}).sort({ createdAt: -1 });
+    const all = await Product.find({}).sort({ priority: 1, createdAt: -1 });
     return res.status(201).json({ message: `Successfully uploaded ${count} products!`, products: all });
   } catch (err) {
     return res.status(500).json({ message: 'Bulk upload error: ' + err.message });
@@ -606,12 +574,13 @@ app.post('/api/products/upload', upload.single('image'), (req, res) => {
 });
 
 // =========================================================================
-// 🟢 6. BANNERS, REVIEWS & COUPONS APIS
+// 🟢 4. BANNERS (SORTED BY PRIORITY ASCENDING: 1, 2, 3...)
 // =========================================================================
 
 app.get('/api/banners', async (req, res) => {
   try {
-    const banners = await Banner.find({}).sort({ createdAt: -1 });
+    // 🟢 Priority 1 banner shows first in slider
+    const banners = await Banner.find({}).sort({ priority: 1, createdAt: -1 });
     return res.status(200).json(banners);
   } catch (err) {
     return res.status(500).json({ message: 'Fetch banners failed' });
@@ -620,22 +589,89 @@ app.get('/api/banners', async (req, res) => {
 
 app.post('/api/banners', async (req, res) => {
   try {
-    const banner = new Banner(req.body);
+    const { title, subtitle, badge, img, bg, priority } = req.body;
+    const banner = new Banner({
+      title: title || '',
+      subtitle: subtitle || '',
+      badge: badge || '',
+      img: img || '',
+      bg: bg || '',
+      priority: priority !== undefined && priority !== '' ? Number(priority) : 100
+    });
     await banner.save();
-    const all = await Banner.find({}).sort({ createdAt: -1 });
+    const all = await Banner.find({}).sort({ priority: 1, createdAt: -1 });
     return res.status(201).json({ message: 'Banner saved', banners: all });
   } catch (err) {
     return res.status(500).json({ message: 'Banner save failed' });
   }
 });
 
+app.put('/api/banners/:id', async (req, res) => {
+  try {
+    if (req.body.priority !== undefined) {
+      req.body.priority = Number(req.body.priority) || 100;
+    }
+    await Banner.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    const all = await Banner.find({}).sort({ priority: 1, createdAt: -1 });
+    return res.status(200).json({ message: 'Banner updated', banners: all });
+  } catch (err) {
+    return res.status(500).json({ message: 'Banner update failed' });
+  }
+});
+
 app.delete('/api/banners/:id', async (req, res) => {
   try {
     await Banner.findByIdAndDelete(req.params.id);
-    const all = await Banner.find({}).sort({ createdAt: -1 });
+    const all = await Banner.find({}).sort({ priority: 1, createdAt: -1 });
     return res.status(200).json({ message: 'Banner deleted', banners: all });
   } catch (err) {
     return res.status(500).json({ message: 'Banner delete error' });
+  }
+});
+
+// =========================================================================
+// 🟢 5. ORDERS, REVIEWS & COUPONS APIS
+// =========================================================================
+
+app.get('/api/orders', async (req, res) => {
+  try {
+    const orders = await Order.find({}).sort({ createdAt: -1 });
+    return res.status(200).json(orders);
+  } catch (err) {
+    return res.status(500).json({ message: 'Failed to fetch orders: ' + err.message });
+  }
+});
+
+app.post('/api/orders', async (req, res) => {
+  try {
+    const newOrder = new Order(req.body);
+    const saved = await newOrder.save();
+    return res.status(201).json({ message: 'Order placed successfully', order: saved });
+  } catch (err) {
+    return res.status(500).json({ message: 'Order placement failed: ' + err.message });
+  }
+});
+
+app.put('/api/orders/:id/status', async (req, res) => {
+  try {
+    const updated = await Order.findByIdAndUpdate(req.params.id, { status: req.body.status }, { new: true });
+    return res.status(200).json(updated);
+  } catch (err) {
+    return res.status(500).json({ message: 'Status update failed' });
+  }
+});
+
+app.put('/api/orders/:id/return', async (req, res) => {
+  try {
+    const { returnType, reason, comments } = req.body;
+    const updated = await Order.findByIdAndUpdate(
+      req.params.id,
+      { status: `Return Requested (${returnType}): ${reason} - ${comments || ''}` },
+      { new: true }
+    );
+    return res.status(200).json(updated);
+  } catch (err) {
+    return res.status(500).json({ message: 'Return request error' });
   }
 });
 
@@ -722,7 +758,7 @@ app.delete('/api/coupons/:id', async (req, res) => {
 });
 
 app.get('/', (req, res) => {
-  res.send('🚀 TechStore Single Central Backend is Active & Live for Customer & Admin!');
+  res.send('🚀 TechStore Single Central Backend is Active with Product & Banner Priority Support!');
 });
 
 // =========================================================================
