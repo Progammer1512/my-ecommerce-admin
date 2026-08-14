@@ -76,7 +76,7 @@ function App() {
 
   const [coupons, setCoupons] = useState([]);
 
-  // 🟢 PRODUCT STATE (WITH PRIORITY RANK)
+  // 🟢 PRODUCT STATE & INLINE RANK INPUT TRACKER
   const [editingId, setEditingId] = useState(null);
   const [name, setName] = useState('');
   const [price, setPrice] = useState('');
@@ -85,6 +85,7 @@ function App() {
   const [image, setImage] = useState('');
   const [stock, setStock] = useState(0);
   const [productPriority, setProductPriority] = useState(100);
+  const [rankInputs, setRankInputs] = useState({});
 
   // 🟢 BANNER STATE (WITH PRIORITY RANK)
   const [bannerTitle, setBannerTitle] = useState('');
@@ -601,7 +602,7 @@ function App() {
     }
   };
 
-  // 🟢 SAVE PRODUCT WITH PRIORITY
+  // 🟢 SAVE PRODUCT VIA MODAL
   const handleProductSubmit = async (e) => {
     e.preventDefault();
     const parsedStock = parseCleanStock(stock);
@@ -633,18 +634,27 @@ function App() {
     }
   };
 
-  // 🟢 QUICK PRODUCT PRIORITY UPDATE FROM TABLE
-  const handleQuickProductPriority = async (prod, newRank) => {
-    const rankNum = Number(newRank);
-    if (isNaN(rankNum) || rankNum < 1) return;
+  // 🟢 1-CLICK SAVE PRODUCT RANK DIRECTLY FROM TABLE (INSTANT LIVE UPDATE)
+  const handleSaveSingleProductRank = async (prod, rankValue) => {
+    const targetId = prod._id || prod.id;
+    const numRank = parseInt(rankValue, 10);
+    
+    if (isNaN(numRank) || numRank < 1) {
+      alert("⚠️ Please enter a valid rank number (e.g. 1, 2, 3...)");
+      return;
+    }
 
     try {
-      await axios.put(`${BASE_URL}/api/products/${prod._id || prod.id}`, {
-        priority: rankNum
-      }, getAuthHeader());
+      const authConfig = getAuthHeader();
+      await axios.put(`${BASE_URL}/api/products/${targetId}`, {
+        priority: numRank
+      }, authConfig);
+
+      alert(`✅ Display Rank #${numRank} assigned successfully to '${prod.name}'!`);
       fetchData();
     } catch (err) {
-      alert('Failed to update product priority rank: ' + err.message);
+      console.error('Failed to update rank:', err);
+      alert('Failed to save rank: ' + (err.response?.data?.message || err.message));
     }
   };
 
@@ -905,7 +915,7 @@ function App() {
         <span className="fw-bold text-warning d-none d-sm-inline fs-5">TechStore Admin</span>
 
         <div className="d-flex align-items-center gap-2">
-          {/* 🟢 📲 1-CLICK INSTALL ADMIN APP BUTTON (APPEARS ONLY IN BROWSER ON MOBILE) */}
+          {/* 📲 1-CLICK INSTALL ADMIN APP BUTTON */}
           {installPrompt && !isRunningStandalone() && (
             <button 
               className="btn btn-outline-warning btn-sm fw-bold rounded-pill shadow-sm d-flex align-items-center gap-1"
@@ -1272,7 +1282,7 @@ function App() {
           </div>
         )}
 
-        {/* 🟢 SLIDING BANNERS TAB (WITH DISPLAY PRIORITY CONTROL) */}
+        {/* 🟢 SLIDING BANNERS TAB */}
         {activeTab === 'banners' && hasTabAccess(userRole, 'banners') && (
           <div>
             <h3 className="fw-bold mb-4">Customer Website Hero Banner Manager</h3>
@@ -1294,7 +1304,6 @@ function App() {
                         <label className="form-label fw-semibold">Badge Code / Tag</label>
                         <input type="text" className="form-control" placeholder="e.g. USE CODE: DIWALI30" value={bannerBadge} onChange={(e) => setBannerBadge(e.target.value)} />
                       </div>
-                      {/* 🟢 BANNER DISPLAY PRIORITY INPUT */}
                       <div className="col-6">
                         <label className="form-label fw-bold text-success">⭐ Display Rank</label>
                         <input 
@@ -1354,7 +1363,6 @@ function App() {
                           </div>
 
                           <div className="d-flex align-items-center gap-2 ms-auto">
-                            {/* 🟢 QUICK PRIORITY SELECTOR */}
                             <div className="d-flex align-items-center gap-1 bg-white p-1 rounded border">
                               <span className="text-dark small fw-bold ps-1">Rank:</span>
                               <select 
@@ -1382,7 +1390,7 @@ function App() {
           </div>
         )}
 
-        {/* 🟢 PRODUCTS & STOCK TAB (WITH PRIORITY RANK CONTROL) */}
+        {/* 🟢 PRODUCTS & STOCK TAB (WITH INLINE 1-CLICK SAVE RANK BUTTON) */}
         {activeTab === 'products' && hasTabAccess(userRole, 'products') && (
           <div>
             <h3 className="fw-bold mb-4">Product Information & Inventory Priority (PIM)</h3>
@@ -1462,7 +1470,6 @@ function App() {
                         />
                       </div>
                       
-                      {/* 🟢 PRODUCT DISPLAY PRIORITY (RANK) FIELD */}
                       <div className="col-6">
                         <label className="form-label fw-bold text-success">⭐ Display Rank</label>
                         <input 
@@ -1550,8 +1557,8 @@ function App() {
                               />
                             </th>
                           )}
-                          <th style={{ minWidth: '80px', whiteSpace: 'nowrap' }}>Rank</th>
-                          <th style={{ minWidth: '180px', whiteSpace: 'nowrap' }}>Item</th>
+                          <th style={{ minWidth: '170px', whiteSpace: 'nowrap' }}>⭐ Set Rank</th>
+                          <th style={{ minWidth: '180px', whiteSpace: 'nowrap' }}>Product Item</th>
                           <th style={{ minWidth: '120px', whiteSpace: 'nowrap' }}>Category</th>
                           <th style={{ minWidth: '90px', whiteSpace: 'nowrap' }}>Price</th>
                           <th style={{ minWidth: '130px', whiteSpace: 'nowrap' }}>Stock</th>
@@ -1571,7 +1578,8 @@ function App() {
                             const rawVal = p.countInStock !== undefined ? p.countInStock : (p.stock !== undefined ? p.stock : 0);
                             const currentStock = Number(rawVal) || 0;
                             const isSelected = selectedProductIds.includes(targetId);
-                            const rank = p.priority !== undefined ? p.priority : 100;
+                            const defaultRank = p.priority !== undefined ? p.priority : 100;
+                            const currentInputRank = rankInputs[targetId] !== undefined ? rankInputs[targetId] : defaultRank;
 
                             return (
                             <tr key={targetId} className={isSelected ? 'table-warning' : ''}>
@@ -1585,17 +1593,31 @@ function App() {
                                   />
                                 </td>
                               )}
-                              {/* 🟢 QUICK PRIORITY RANK SELECTOR / BADGE IN TABLE */}
+                              
+                              {/* 🟢 DIRECT INLINE RANK NUMBER INPUT + 💾 SAVE RANK BUTTON */}
                               <td style={{ whiteSpace: 'nowrap' }}>
-                                <input 
-                                  type="number" 
-                                  className="form-control form-control-sm fw-bold border-success text-center" 
-                                  style={{ width: '60px' }} 
-                                  defaultValue={rank} 
-                                  onBlur={(e) => handleQuickProductPriority(p, e.target.value)} 
-                                  title="Change number and click outside to update rank"
-                                />
+                                <div className="d-flex align-items-center gap-1">
+                                  <input 
+                                    type="number" 
+                                    className="form-control form-control-sm fw-bold border-success text-center" 
+                                    style={{ width: '65px' }} 
+                                    min="1"
+                                    value={currentInputRank} 
+                                    onChange={(e) => setRankInputs({ ...rankInputs, [targetId]: e.target.value })}
+                                    title="Set rank number (1 is top priority)"
+                                  />
+                                  <button 
+                                    type="button"
+                                    className="btn btn-sm btn-success fw-bold px-2 py-1 shadow-sm d-flex align-items-center gap-1"
+                                    style={{ fontSize: '11px', whiteSpace: 'nowrap' }}
+                                    onClick={() => handleSaveSingleProductRank(p, currentInputRank)}
+                                    title="Save this product rank to database"
+                                  >
+                                    <span>💾 Save Rank</span>
+                                  </button>
+                                </div>
                               </td>
+
                               <td className="fw-bold small" style={{ whiteSpace: 'nowrap' }}>{p.name}</td>
                               <td style={{ whiteSpace: 'nowrap' }}><span className="badge bg-secondary">{p.category}</span></td>
                               <td className="text-success fw-bold" style={{ whiteSpace: 'nowrap' }}>₹{p.price}</td>
