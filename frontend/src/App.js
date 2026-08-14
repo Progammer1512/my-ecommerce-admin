@@ -6,7 +6,7 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import { hasTabAccess } from './roleConfig';
 
 // LIVE BACKEND BASE URL (NO TRAILING SLASH)
-const BASE_URL = 'https://my-ecommerce-project-nmfj.onrender.com';
+const BASE_URL = 'https://my-ecommerce-admin.onrender.com';
 
 // Helper to sanitize old localhost image urls
 const getCleanImageUrl = (url) => {
