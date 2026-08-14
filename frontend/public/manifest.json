@@ -1,6 +1,6 @@
 {
-  "short_name": "React App",
-  "name": "Create React App Sample",
+  "short_name": "StoreAdmin",
+  "name": "TechStore Admin - Portal App",
   "icons": [
     {
       "src": "favicon.ico",
@@ -8,18 +8,21 @@
       "type": "image/x-icon"
     },
     {
-      "src": "logo192.png",
+      "src": "https://cdn-icons-png.flaticon.com/512/906/906343.png",
       "type": "image/png",
-      "sizes": "192x192"
+      "sizes": "192x192",
+      "purpose": "any maskable"
     },
     {
-      "src": "logo512.png",
+      "src": "https://cdn-icons-png.flaticon.com/512/906/906343.png",
       "type": "image/png",
-      "sizes": "512x512"
+      "sizes": "512x512",
+      "purpose": "any maskable"
     }
   ],
-  "start_url": ".",
+  "start_url": "/",
   "display": "standalone",
-  "theme_color": "#000000",
-  "background_color": "#ffffff"
+  "orientation": "any",
+  "theme_color": "#212529",
+  "background_color": "#111827"
 }
