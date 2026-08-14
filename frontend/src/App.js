@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import Papa from 'papaparse';
 import 'bootstrap/dist/css/bootstrap.min.css';
@@ -42,7 +42,7 @@ function App() {
   const [customersList, setCustomersList] = useState([]);
   const [csvFile, setCsvFile] = useState(null);
 
-  // 🟢 ADMIN USERS MANAGEMENT STATES (Used for both Internal & Public Sign Up)
+  // ADMIN USERS MANAGEMENT STATES
   const [adminUsersList, setAdminUsersList] = useState([]);
   const [showAddAdminModal, setShowAddAdminModal] = useState(false);
   const [editingAdminUser, setEditingAdminUser] = useState(null);
@@ -52,7 +52,7 @@ function App() {
   const [orderStatusFilter, setOrderStatusFilter] = useState('ALL');
 
   // CUSTOMERS TAB FILTER STATE
-  const [customerFilter, setCustomerFilter] = useState('ALL'); // ALL, CART, WISHLIST
+  const [customerFilter, setCustomerFilter] = useState('ALL');
   const [selectedTargetCustomer, setSelectedTargetCustomer] = useState(null);
   const [showPersonalDiscountModal, setShowPersonalDiscountModal] = useState(false);
   const [personalCouponCode, setPersonalCouponCode] = useState('');
@@ -64,6 +64,7 @@ function App() {
 
   const [coupons, setCoupons] = useState([]);
 
+  // 🟢 PRODUCT STATE (WITH PRIORITY RANK)
   const [editingId, setEditingId] = useState(null);
   const [name, setName] = useState('');
   const [price, setPrice] = useState('');
@@ -71,12 +72,15 @@ function App() {
   const [description, setDescription] = useState('');
   const [image, setImage] = useState('');
   const [stock, setStock] = useState(0);
+  const [productPriority, setProductPriority] = useState(100);
 
+  // 🟢 BANNER STATE (WITH PRIORITY RANK)
   const [bannerTitle, setBannerTitle] = useState('');
   const [bannerSubtitle, setBannerSubtitle] = useState('');
   const [bannerBadge, setBannerBadge] = useState('');
   const [bannerImage, setBannerImage] = useState('');
   const [bannerBg, setBannerBg] = useState('linear-gradient(135deg, #0d6efd 0%, #0a58ca 100%)');
+  const [bannerPriority, setBannerPriority] = useState(1);
 
   const [newCouponCode, setNewCouponCode] = useState('');
   const [newCouponDiscount, setNewCouponDiscount] = useState('');
@@ -171,7 +175,6 @@ function App() {
     }
   };
 
-  // 🟢 PUBLIC SIGNUP TRIGGERED VIA ADMIN MODAL WITH SECURITY CODE CHECK
   const handleOpenSignup = () => {
     const enteredCode = prompt("🔒 Enter Admin Security Secret Code to Access Signup:");
     if (enteredCode === null) return;
@@ -179,7 +182,7 @@ function App() {
     if (enteredCode.trim() === 'iamthebest~$@%^&15121') {
       setEditingAdminUser(null);
       setAdminFormData({ name: '', email: '', password: '', role: 'SuperAdmin', mobile: '' });
-      setShowAddAdminModal(true); // Opens the exact same admin creator modal for public signup
+      setShowAddAdminModal(true);
     } else {
       alert("❌ Access Denied: Incorrect Secret Code!");
     }
@@ -223,7 +226,6 @@ function App() {
         setCoupons(couponRes.data);
       }
 
-      // FETCH CUSTOMERS WITH CART & WISHLIST TRACKING
       try {
         const custRes = await axios.get(`${BASE_URL}/api/auth/customers`, authConfig);
         if (Array.isArray(custRes.data)) {
@@ -233,7 +235,6 @@ function App() {
         console.log("Customer fetch fallback");
       }
 
-      // 🟢 FETCH ADMIN/STAFF USERS LIST FROM MONGODB
       try {
         const adminRes = await axios.get(`${BASE_URL}/api/auth/admin-users`, authConfig);
         if (Array.isArray(adminRes.data)) {
@@ -255,7 +256,6 @@ function App() {
     }
   }, [user]);
 
-  // 🟢 ADMIN USERS CRUD HANDLERS (Saves directly to adminusers table)
   const handleSaveAdminUser = async (e) => {
     e.preventDefault();
     try {
@@ -325,7 +325,6 @@ function App() {
     return statusMatch && searchMatch;
   });
 
-  // FILTERED CUSTOMERS LIST (ABANDONED CART / WISHLIST)
   const filteredCustomers = customersList.filter(cust => {
     if (customerFilter === 'CART') {
       return cust.cart && cust.cart.length > 0;
@@ -378,6 +377,7 @@ function App() {
     };
   };
 
+  // 🟢 ADD / SAVE BANNER WITH PRIORITY
   const handleAddBanner = async (e) => {
     e.preventDefault();
     if (!bannerTitle || !bannerImage) return alert('Title and Image are required!');
@@ -388,17 +388,36 @@ function App() {
         subtitle: bannerSubtitle,
         badge: bannerBadge,
         img: bannerImage,
-        bg: bannerBg
+        bg: bannerBg,
+        priority: Number(bannerPriority) || 1
       }, getAuthHeader());
 
-      alert('🎉 New Hero Banner Published to Customer Site!');
+      alert(`🎉 New Hero Banner (Rank #${bannerPriority}) Published to Customer Site!`);
       setBanners(res.data.banners || []);
       setBannerTitle('');
       setBannerSubtitle('');
       setBannerBadge('');
       setBannerImage('');
+      setBannerPriority(1);
     } catch (err) {
       alert('Failed to publish banner: ' + (err.response?.data?.message || err.message));
+    }
+  };
+
+  // 🟢 QUICK UPDATE BANNER PRIORITY
+  const handleUpdateBannerPriority = async (b, newRank) => {
+    const rankNum = Number(newRank);
+    if (isNaN(rankNum) || rankNum < 1) return;
+
+    try {
+      const res = await axios.put(`${BASE_URL}/api/banners/${b._id || b.id}`, {
+        priority: rankNum
+      }, getAuthHeader());
+
+      setBanners(res.data.banners || []);
+      fetchData();
+    } catch (err) {
+      alert('Failed to update banner priority: ' + err.message);
     }
   };
 
@@ -467,6 +486,7 @@ function App() {
 
             const rawImage = cleanRow.image || 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=500';
             const rawStock = parseCleanStock(cleanRow.stock || cleanRow.countinstock || cleanRow.quantity || cleanRow.qty);
+            const rawPriority = cleanRow.priority ? Number(cleanRow.priority) : 100;
 
             const productPayload = {
               name: String(rawName).trim(),
@@ -475,14 +495,15 @@ function App() {
               description: rawDesc,
               image: String(rawImage).trim(),
               stock: rawStock,
-              countInStock: rawStock
+              countInStock: rawStock,
+              priority: rawPriority
             };
 
             return axios.post(`${BASE_URL}/api/products`, productPayload, authConfig);
           });
 
           await Promise.all(uploadPromises);
-          alert(`🎉 Successfully uploaded ${rows.length} products to MongoDB!`);
+          alert(`🎉 Successfully uploaded ${rows.length} products to MongoDB with Priorities!`);
           setCsvFile(null);
           fetchData();
         } catch (error) {
@@ -537,9 +558,11 @@ function App() {
     }
   };
 
+  // 🟢 SAVE PRODUCT WITH PRIORITY
   const handleProductSubmit = async (e) => {
     e.preventDefault();
     const parsedStock = parseCleanStock(stock);
+    const parsedPriority = Number(productPriority) || 100;
     
     const productData = { 
       name, 
@@ -548,21 +571,37 @@ function App() {
       description: description || 'High quality store product.', 
       image, 
       stock: parsedStock,
-      countInStock: parsedStock
+      countInStock: parsedStock,
+      priority: parsedPriority // 🟢 Display Rank: 1 is highest priority
     };
 
     try {
       if (editingId) {
         await axios.put(`${BASE_URL}/api/products/${editingId}`, productData, getAuthHeader());
-        alert(`✅ Product '${name}' Updated in MongoDB! Stock set to ${parsedStock}`);
+        alert(`✅ Product '${name}' Updated! Display Rank: #${parsedPriority}`);
       } else {
         await axios.post(`${BASE_URL}/api/products`, productData, getAuthHeader());
-        alert(`🎉 New Product Created in MongoDB with Stock ${parsedStock}!`);
+        alert(`🎉 New Product Created with Display Rank #${parsedPriority}!`);
       }
       resetProductForm();
       fetchData();
     } catch (error) {
       alert('Failed: ' + (error.response?.data?.message || error.message));
+    }
+  };
+
+  // 🟢 QUICK PRODUCT PRIORITY UPDATE FROM TABLE
+  const handleQuickProductPriority = async (prod, newRank) => {
+    const rankNum = Number(newRank);
+    if (isNaN(rankNum) || rankNum < 1) return;
+
+    try {
+      await axios.put(`${BASE_URL}/api/products/${prod._id || prod.id}`, {
+        priority: rankNum
+      }, getAuthHeader());
+      fetchData();
+    } catch (err) {
+      alert('Failed to update product priority rank: ' + err.message);
     }
   };
 
@@ -574,6 +613,7 @@ function App() {
     setCategory(p.category);
     setDescription(p.description);
     setImage(getCleanImageUrl(p.image));
+    setProductPriority(p.priority !== undefined ? Number(p.priority) : 100);
     
     const fetchedStock = p.countInStock !== undefined ? p.countInStock : (p.stock !== undefined ? p.stock : 0);
     setStock(Number(fetchedStock));
@@ -598,6 +638,7 @@ function App() {
     setDescription('');
     setImage('');
     setStock(0);
+    setProductPriority(100);
     setShowCustomCategory(false);
   };
 
@@ -647,7 +688,6 @@ function App() {
     setNewCouponMaxUsage(50);
   };
 
-  // 🟢 CREATE PERSONAL EXTRA DISCOUNT COUPON FOR SPECIFIC TARGET CUSTOMER
   const handleCreatePersonalDiscount = async (e) => {
     e.preventDefault();
     if (!selectedTargetCustomer || !personalCouponCode || !personalCouponDiscount) {
@@ -659,9 +699,9 @@ function App() {
       code: personalCouponCode.toUpperCase().trim(),
       discount: Number(personalCouponDiscount),
       category: 'All',
-      maxUsage: 1, // Only for 1 time usage
+      maxUsage: 1,
       status: 'Active',
-      targetUserEmail: selectedTargetCustomer.email.toLowerCase().trim() // 🎯 TARGETS THIS SPECIFIC USER ONLY
+      targetUserEmail: selectedTargetCustomer.email.toLowerCase().trim()
     };
 
     try {
@@ -699,7 +739,6 @@ function App() {
             <p className="text-muted small">Admin & Staff Access Guard</p>
           </div>
 
-          {/* 🟢 SINGLE UNIFIED LOGIN / SIGNUP TRIGGER (NO SEPARATE FORMS) */}
           <form onSubmit={handleLogin}>
             <div className="mb-3">
               <label className="form-label fw-bold">Email Address</label>
@@ -716,10 +755,8 @@ function App() {
               </button>
             </div>
           </form>
-
         </div>
 
-        {/* 🟢 UNIFIED MODAL FOR BOTH PUBLIC SIGNUP AND INTERNAL ADMIN CREATION */}
         {showAddAdminModal && (
           <div className="modal show d-block bg-dark bg-opacity-50" tabIndex="-1" style={{ zIndex: 1070 }}>
             <div className="modal-dialog modal-dialog-centered">
@@ -874,7 +911,7 @@ function App() {
                 className={`nav-link text-start fw-bold ${activeTab === 'products' ? 'active bg-warning text-dark' : 'text-white'}`} 
                 onClick={() => handleTabSelect('products')}
               >
-                <i className="bi bi-box-seam me-2"></i>Products & Stock
+                <i className="bi bi-box-seam me-2"></i>Products & Stock (Priority)
               </button>
             )}
 
@@ -914,7 +951,6 @@ function App() {
               </button>
             )}
 
-            {/* CUSTOMERS & WISHLIST INTELLIGENCE TAB */}
             <button 
               className={`nav-link text-start fw-bold ${activeTab === 'customers' ? 'active bg-warning text-dark' : 'text-white'}`} 
               onClick={() => handleTabSelect('customers')}
@@ -922,7 +958,6 @@ function App() {
               <i className="bi bi-people-fill me-2"></i>👥 Customers & Wishlist ({customersList.length})
             </button>
 
-            {/* 🟢 NEW ADMIN TAB PLACED DIRECTLY BELOW CUSTOMERS & WISHLIST */}
             <button 
               className={`nav-link text-start fw-bold ${activeTab === 'admin-users' ? 'active bg-warning text-dark' : 'text-white'}`} 
               onClick={() => handleTabSelect('admin-users')}
@@ -1003,7 +1038,7 @@ function App() {
           </div>
         )}
 
-        {/* CUSTOMERS INTELLIGENCE TAB (PURE STORE CUSTOMERS ONLY) */}
+        {/* CUSTOMERS INTELLIGENCE TAB */}
         {activeTab === 'customers' && (
           <div>
             <div className="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
@@ -1097,7 +1132,7 @@ function App() {
           </div>
         )}
 
-        {/* 🟢 NEW ADMIN USERS MANAGEMENT TAB (PLACED RIGHT BELOW CUSTOMERS & WISHLIST) */}
+        {/* ADMIN USERS MANAGEMENT TAB */}
         {activeTab === 'admin-users' && (
           <div>
             <div className="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
@@ -1181,138 +1216,7 @@ function App() {
           </div>
         )}
 
-        {/* 🟢 ADD / EDIT ADMIN USER MODAL */}
-        {showAddAdminModal && (
-          <div className="modal show d-block bg-dark bg-opacity-50" tabIndex="-1" style={{ zIndex: 1070 }}>
-            <div className="modal-dialog modal-dialog-centered">
-              <div className="modal-content border-0 shadow-lg p-3 p-md-4 rounded-4">
-                <div className="d-flex justify-content-between align-items-center border-bottom pb-2 mb-3">
-                  <h5 className="fw-bold mb-0 text-primary">
-                    {editingAdminUser ? '✏️ Edit Admin / Staff User' : '➕ Create New Admin / Staff User'}
-                  </h5>
-                  <button type="button" className="btn-close" onClick={() => setShowAddAdminModal(false)}></button>
-                </div>
-
-                <form onSubmit={handleSaveAdminUser}>
-                  <div className="mb-2">
-                    <label className="form-label fw-bold small">Full Name</label>
-                    <input 
-                      type="text" 
-                      className="form-control" 
-                      required 
-                      value={adminFormData.name} 
-                      onChange={(e) => setAdminFormData({...adminFormData, name: e.target.value})} 
-                      placeholder="John Manager"
-                    />
-                  </div>
-                  <div className="mb-2">
-                    <label className="form-label fw-bold small">Email ID</label>
-                    <input 
-                      type="email" 
-                      className="form-control" 
-                      required 
-                      value={adminFormData.email} 
-                      onChange={(e) => setAdminFormData({...adminFormData, email: e.target.value})} 
-                      placeholder="manager@techstore.com"
-                    />
-                  </div>
-                  <div className="mb-2">
-                    <label className="form-label fw-bold small">Password {editingAdminUser && '(Leave blank to keep old)'}</label>
-                    <input 
-                      type="password" 
-                      className="form-control" 
-                      required={!editingAdminUser} 
-                      value={adminFormData.password} 
-                      onChange={(e) => setAdminFormData({...adminFormData, password: e.target.value})} 
-                      placeholder="••••••••"
-                    />
-                  </div>
-                  <div className="mb-2">
-                    <label className="form-label fw-bold small">Role / Permission</label>
-                    <select 
-                      className="form-select fw-bold text-primary" 
-                      value={adminFormData.role} 
-                      onChange={(e) => setAdminFormData({...adminFormData, role: e.target.value})}
-                    >
-                      <option value="SuperAdmin">SuperAdmin (Full Access)</option>
-                      <option value="InventoryManager">InventoryManager (Products & Stock)</option>
-                      <option value="Staff">Support Staff (Orders & Reviews)</option>
-                    </select>
-                  </div>
-                  <div className="mb-3">
-                    <label className="form-label fw-bold small">Mobile Number</label>
-                    <input 
-                      type="tel" 
-                      className="form-control" 
-                      value={adminFormData.mobile} 
-                      onChange={(e) => setAdminFormData({...adminFormData, mobile: e.target.value})} 
-                      placeholder="+91 9876543210"
-                    />
-                  </div>
-
-                  <div className="d-flex justify-content-end gap-2 pt-2 border-top">
-                    <button type="button" className="btn btn-outline-secondary" onClick={() => setShowAddAdminModal(false)}>Cancel</button>
-                    <button type="submit" className="btn btn-primary fw-bold px-4">Save Admin User</button>
-                  </div>
-                </form>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* EXCLUSIVE PERSONAL DISCOUNT ISSUANCE MODAL */}
-        {showPersonalDiscountModal && selectedTargetCustomer && (
-          <div className="modal show d-block bg-dark bg-opacity-50" tabIndex="-1" style={{ zIndex: 1070 }}>
-            <div className="modal-dialog modal-dialog-centered">
-              <div className="modal-content border-0 shadow-lg p-3 p-md-4 rounded-4">
-                <div className="d-flex justify-content-between align-items-center border-bottom pb-2 mb-3">
-                  <h5 className="fw-bold mb-0 text-success"><i className="bi bi-gift-fill me-2"></i>Issue Exclusive Extra Discount</h5>
-                  <button type="button" className="btn-close" onClick={() => setShowPersonalDiscountModal(false)}></button>
-                </div>
-
-                <div className="p-3 bg-light rounded border mb-3">
-                  <span className="fw-bold text-dark d-block">Target Customer: {selectedTargetCustomer.name}</span>
-                  <small className="text-muted d-block">{selectedTargetCustomer.email}</small>
-                  <small className="text-primary fw-bold d-block mt-1">
-                    🎯 Coupon will ONLY be visible & usable by this customer!
-                  </small>
-                </div>
-
-                <form onSubmit={handleCreatePersonalDiscount}>
-                  <div className="mb-3">
-                    <label className="form-label fw-bold small">Exclusive Coupon Code</label>
-                    <input 
-                      type="text" 
-                      className="form-control fw-bold text-uppercase text-primary" 
-                      required 
-                      value={personalCouponCode} 
-                      onChange={(e) => setPersonalCouponCode(e.target.value)} 
-                    />
-                  </div>
-                  <div className="mb-3">
-                    <label className="form-label fw-bold small">Discount Percentage (%)</label>
-                    <input 
-                      type="number" 
-                      className="form-control fw-bold" 
-                      required 
-                      min="1" 
-                      max="90" 
-                      value={personalCouponDiscount} 
-                      onChange={(e) => setPersonalCouponDiscount(e.target.value)} 
-                    />
-                  </div>
-
-                  <div className="d-flex justify-content-end gap-2 pt-2 border-top">
-                    <button type="button" className="btn btn-outline-secondary" onClick={() => setShowPersonalDiscountModal(false)}>Cancel</button>
-                    <button type="submit" className="btn btn-success fw-bold px-4">Issue Discount Coupon</button>
-                  </div>
-                </form>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* BANNERS TAB */}
+        {/* 🟢 SLIDING BANNERS TAB (WITH DISPLAY PRIORITY CONTROL) */}
         {activeTab === 'banners' && hasTabAccess(userRole, 'banners') && (
           <div>
             <h3 className="fw-bold mb-4">Customer Website Hero Banner Manager</h3>
@@ -1329,9 +1233,24 @@ function App() {
                       <label className="form-label fw-semibold">Subtitle Description</label>
                       <input type="text" className="form-control" placeholder="e.g. Up to 30% OFF on all smart watches" value={bannerSubtitle} onChange={(e) => setBannerSubtitle(e.target.value)} />
                     </div>
-                    <div className="mb-2">
-                      <label className="form-label fw-semibold">Badge Code / Tag</label>
-                      <input type="text" className="form-control" placeholder="e.g. USE CODE: DIWALI30" value={bannerBadge} onChange={(e) => setBannerBadge(e.target.value)} />
+                    <div className="row mb-2">
+                      <div className="col-6">
+                        <label className="form-label fw-semibold">Badge Code / Tag</label>
+                        <input type="text" className="form-control" placeholder="e.g. USE CODE: DIWALI30" value={bannerBadge} onChange={(e) => setBannerBadge(e.target.value)} />
+                      </div>
+                      {/* 🟢 BANNER DISPLAY PRIORITY INPUT */}
+                      <div className="col-6">
+                        <label className="form-label fw-bold text-success">⭐ Display Rank</label>
+                        <input 
+                          type="number" 
+                          className="form-control fw-bold border-success" 
+                          min="1" 
+                          placeholder="1 (First Slide)" 
+                          value={bannerPriority} 
+                          onChange={(e) => setBannerPriority(e.target.value)} 
+                          title="1 means this banner will slide first to customer"
+                        />
+                      </div>
                     </div>
                     <div className="mb-2">
                       <label className="form-label fw-semibold">Theme Color Style</label>
@@ -1356,22 +1275,45 @@ function App() {
 
               <div className="col-lg-7">
                 <div className="card border-0 shadow-sm p-4 bg-white">
-                  <h5 className="fw-bold mb-3">Live Active Banners ({banners.length})</h5>
+                  <h5 className="fw-bold mb-3">Live Active Banners ({banners.length}) - Sorted by Display Rank</h5>
                   <div className="d-flex flex-column gap-3">
                     {banners.length === 0 ? (
                       <p className="text-muted">No active banners. Add one using the form.</p>
                     ) : (
-                      banners.map((b) => {
+                      banners.map((b, idx) => {
                         const bannerId = b._id || b.id;
+                        const currentRank = b.priority !== undefined ? b.priority : (idx + 1);
+
                         return (
-                        <div key={bannerId} className="p-3 rounded-3 text-white d-flex align-items-center justify-content-between shadow-sm" style={{ background: b.bg || 'linear-gradient(135deg, #0d6efd 0%, #0a58ca 100%)' }}>
-                          <div>
-                            <span className="badge bg-warning text-dark fw-bold mb-1">{b.badge || 'PROMO'}</span>
-                            <h5 className="fw-bold m-0">{b.title}</h5>
-                            <small className="opacity-75">{b.subtitle}</small>
-                          </div>
+                        <div key={bannerId} className="p-3 rounded-3 text-white d-flex align-items-center justify-content-between shadow-sm flex-wrap gap-2" style={{ background: b.bg || 'linear-gradient(135deg, #0d6efd 0%, #0a58ca 100%)' }}>
                           <div className="d-flex align-items-center gap-3">
-                            <img src={getCleanImageUrl(b.img)} alt="Preview" className="rounded border bg-white" width="60" height="60" style={{ objectFit: 'cover' }} />
+                            <span className="badge bg-light text-dark fw-bold fs-6 border shadow-sm">
+                              👑 Rank #{currentRank}
+                            </span>
+                            <div>
+                              <span className="badge bg-warning text-dark fw-bold mb-1">{b.badge || 'PROMO'}</span>
+                              <h5 className="fw-bold m-0">{b.title}</h5>
+                              <small className="opacity-75">{b.subtitle}</small>
+                            </div>
+                          </div>
+
+                          <div className="d-flex align-items-center gap-2 ms-auto">
+                            {/* 🟢 QUICK PRIORITY SELECTOR */}
+                            <div className="d-flex align-items-center gap-1 bg-white p-1 rounded border">
+                              <span className="text-dark small fw-bold ps-1">Rank:</span>
+                              <select 
+                                className="form-select form-select-sm fw-bold border-0 text-success py-0"
+                                style={{ width: '65px' }}
+                                value={currentRank}
+                                onChange={(e) => handleUpdateBannerPriority(b, e.target.value)}
+                              >
+                                {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(r => (
+                                  <option key={r} value={r}>#{r}</option>
+                                ))}
+                              </select>
+                            </div>
+
+                            <img src={getCleanImageUrl(b.img)} alt="Preview" className="rounded border bg-white" width="50" height="50" style={{ objectFit: 'cover' }} />
                             <button className="btn btn-danger btn-sm fw-bold" onClick={() => handleDeleteBanner(bannerId)}>Delete</button>
                           </div>
                         </div>
@@ -1384,10 +1326,10 @@ function App() {
           </div>
         )}
 
-        {/* PRODUCTS & STOCK TAB */}
+        {/* 🟢 PRODUCTS & STOCK TAB (WITH PRIORITY RANK CONTROL) */}
         {activeTab === 'products' && hasTabAccess(userRole, 'products') && (
           <div>
-            <h3 className="fw-bold mb-4">Product Information & Inventory (PIM)</h3>
+            <h3 className="fw-bold mb-4">Product Information & Inventory Priority (PIM)</h3>
 
             <div className="card border-0 shadow-sm p-4 bg-white mb-4">
               <h5 className="fw-bold mb-3 text-success">
@@ -1405,7 +1347,7 @@ function App() {
                 </button>
               </form>
               <small className="text-muted mt-2 d-block">
-                CSV Headers Required: <code>name, price, category, description, image, stock</code>
+                CSV Headers Required: <code>name, price, category, description, image, stock, priority</code>
               </small>
             </div>
 
@@ -1418,6 +1360,7 @@ function App() {
                       <label className="form-label fw-semibold">Title</label>
                       <input type="text" className="form-control" required value={name} onChange={(e) => setName(e.target.value)} />
                     </div>
+                    
                     <div className="row mb-2">
                       <div className="col-6">
                         <label className="form-label fw-semibold">Price (₹)</label>
@@ -1451,15 +1394,31 @@ function App() {
                       </div>
                     )}
 
-                    <div className="mb-2">
-                      <label className="form-label fw-semibold">Stock Quantity</label>
-                      <input 
-                        type="number" 
-                        className="form-control" 
-                        required 
-                        value={stock} 
-                        onChange={(e) => setStock(e.target.value)} 
-                      />
+                    <div className="row mb-2">
+                      <div className="col-6">
+                        <label className="form-label fw-semibold">Stock Quantity</label>
+                        <input 
+                          type="number" 
+                          className="form-control" 
+                          required 
+                          value={stock} 
+                          onChange={(e) => setStock(e.target.value)} 
+                        />
+                      </div>
+                      
+                      {/* 🟢 PRODUCT DISPLAY PRIORITY (RANK) FIELD */}
+                      <div className="col-6">
+                        <label className="form-label fw-bold text-success">⭐ Display Rank</label>
+                        <input 
+                          type="number" 
+                          className="form-control fw-bold border-success" 
+                          min="1" 
+                          placeholder="1 (Top Position)" 
+                          value={productPriority} 
+                          onChange={(e) => setProductPriority(e.target.value)} 
+                          title="Rank 1 appears on Page 1 Top"
+                        />
+                      </div>
                     </div>
 
                     <div className="mb-2">
@@ -1485,8 +1444,9 @@ function App() {
                       <label className="form-label fw-semibold">Description</label>
                       <textarea className="form-control" rows="2" required value={description} onChange={(e) => setDescription(e.target.value)}></textarea>
                     </div>
+                    
                     <div className="d-flex gap-2">
-                      <button type="submit" className="btn btn-primary w-100 fw-bold">{editingId ? 'Save' : 'Create'}</button>
+                      <button type="submit" className="btn btn-primary w-100 fw-bold">{editingId ? 'Save Product' : 'Create Product'}</button>
                       {editingId && <button type="button" className="btn btn-secondary" onClick={resetProductForm}>Cancel</button>}
                     </div>
                   </form>
@@ -1528,23 +1488,24 @@ function App() {
                             <th style={{ width: '40px', minWidth: '40px', whiteSpace: 'nowrap' }}>
                               <input 
                                 type="checkbox" 
-                                className="form-check-input"
-                                checked={products.length > 0 && selectedProductIds.length === products.length}
-                                onChange={handleSelectAllProducts}
+                                className="form-check-input" 
+                                checked={products.length > 0 && selectedProductIds.length === products.length} 
+                                onChange={handleSelectAllProducts} 
                               />
                             </th>
                           )}
-                          <th style={{ minWidth: '200px', whiteSpace: 'nowrap' }}>Item</th>
-                          <th style={{ minWidth: '140px', whiteSpace: 'nowrap' }}>Category</th>
-                          <th style={{ minWidth: '110px', whiteSpace: 'nowrap' }}>Price</th>
-                          <th style={{ minWidth: '150px', whiteSpace: 'nowrap' }}>Stock Status</th>
-                          <th style={{ minWidth: '140px', whiteSpace: 'nowrap' }}>Actions</th>
+                          <th style={{ minWidth: '80px', whiteSpace: 'nowrap' }}>Rank</th>
+                          <th style={{ minWidth: '180px', whiteSpace: 'nowrap' }}>Item</th>
+                          <th style={{ minWidth: '120px', whiteSpace: 'nowrap' }}>Category</th>
+                          <th style={{ minWidth: '90px', whiteSpace: 'nowrap' }}>Price</th>
+                          <th style={{ minWidth: '130px', whiteSpace: 'nowrap' }}>Stock</th>
+                          <th style={{ minWidth: '120px', whiteSpace: 'nowrap' }}>Actions</th>
                         </tr>
                       </thead>
                       <tbody>
                         {products.length === 0 ? (
                           <tr>
-                            <td colSpan={userRole === 'SuperAdmin' ? 6 : 5} className="text-center py-4 text-muted">
+                            <td colSpan={userRole === 'SuperAdmin' ? 7 : 6} className="text-center py-4 text-muted">
                               No products found in database. Add new items or bulk upload CSV.
                             </td>
                           </tr>
@@ -1554,6 +1515,7 @@ function App() {
                             const rawVal = p.countInStock !== undefined ? p.countInStock : (p.stock !== undefined ? p.stock : 0);
                             const currentStock = Number(rawVal) || 0;
                             const isSelected = selectedProductIds.includes(targetId);
+                            const rank = p.priority !== undefined ? p.priority : 100;
 
                             return (
                             <tr key={targetId} className={isSelected ? 'table-warning' : ''}>
@@ -1561,12 +1523,23 @@ function App() {
                                 <td style={{ whiteSpace: 'nowrap' }}>
                                   <input 
                                     type="checkbox" 
-                                    className="form-check-input"
-                                    checked={isSelected}
-                                    onChange={() => handleToggleSelectProduct(targetId)}
+                                    className="form-check-input" 
+                                    checked={isSelected} 
+                                    onChange={() => handleToggleSelectProduct(targetId)} 
                                   />
                                 </td>
                               )}
+                              {/* 🟢 QUICK PRIORITY RANK SELECTOR / BADGE IN TABLE */}
+                              <td style={{ whiteSpace: 'nowrap' }}>
+                                <input 
+                                  type="number" 
+                                  className="form-control form-control-sm fw-bold border-success text-center" 
+                                  style={{ width: '60px' }} 
+                                  defaultValue={rank} 
+                                  onBlur={(e) => handleQuickProductPriority(p, e.target.value)} 
+                                  title="Change number and click outside to update rank"
+                                />
+                              </td>
                               <td className="fw-bold small" style={{ whiteSpace: 'nowrap' }}>{p.name}</td>
                               <td style={{ whiteSpace: 'nowrap' }}><span className="badge bg-secondary">{p.category}</span></td>
                               <td className="text-success fw-bold" style={{ whiteSpace: 'nowrap' }}>₹{p.price}</td>
@@ -1574,7 +1547,7 @@ function App() {
                                 {currentStock <= 0 ? (
                                   <span className="badge bg-danger">Out of Stock (0)</span>
                                 ) : currentStock < 5 ? (
-                                  <span className="badge bg-warning text-dark">Low Stock ({currentStock})</span>
+                                  <span className="badge bg-warning text-dark">Low ({currentStock})</span>
                                 ) : (
                                   <span className="badge bg-success">In Stock ({currentStock})</span>
                                 )}
@@ -1935,7 +1908,7 @@ function App() {
                         </tr>
                       </thead>
                       <tbody className="text-nowrap">
-                        {coupons.map((c, idx) => {
+                        {coupons.map((c) => {
                           const couponId = c._id || c.code;
                           return (
                           <tr key={couponId}>
