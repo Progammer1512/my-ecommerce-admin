@@ -20,9 +20,15 @@ const productSchema = new mongoose.Schema({
         required: true,
         default: 'General'
     },
+    // 🟢 Primary Cover Image (मुख्य फ़्रंट इमेज)
     image: {
         type: String,
         default: ''
+    },
+    // 📸 Multiple Product Gallery Images (आगे, पीछे, ऊपर, नीचे के सभी ऐंगल्स)
+    images: {
+        type: [String],
+        default: []
     },
     stock: {
         type: Number,

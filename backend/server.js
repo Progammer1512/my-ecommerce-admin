@@ -7,7 +7,7 @@ const jwt = require('jsonwebtoken');
 require('dotenv').config();
 
 // ==========================================
-// 🗄️ SAFE MODEL RESOLVER WITH PRIORITY SUPPORT
+// 🗄️ SAFE MODEL RESOLVER WITH PRIORITY & MULTI-IMAGE SUPPORT
 // ==========================================
 const resolveModel = (imported, fallbackName, schemaDef, collectionName) => {
   if (imported && typeof imported.find === 'function') return imported;
@@ -55,17 +55,19 @@ const Order = resolveModel(rawOrder, 'Order', {
   status: { type: String, default: 'Processing' }
 }, 'orders');
 
-// 4. Products Model (🟢 WITH PRIORITY)
+// 4. Products Model (🟢 WITH PRIORITY & MULTI-IMAGE GALLERY SUPPORT)
 let rawProd; try { rawProd = require('./models/Product'); } catch (e) {}
 const Product = resolveModel(rawProd, 'Product', {
   name: { type: String, required: true },
   price: { type: Number, required: true },
   category: { type: String, default: 'General' },
   description: { type: String, default: '' },
-  image: { type: String, default: '' },
+  image: { type: String, default: '' }, // Cover main image
+  images: { type: [String], default: [] }, // 📸 Multi-angle gallery images
   countInStock: { type: Number, default: 10 },
+  stock: { type: Number, default: 10 },
   rating: { type: Number, default: 4.5 },
-  priority: { type: Number, default: 100 } // 🟢 1 comes first, 2 second...
+  priority: { type: Number, default: 100 }
 }, 'products');
 
 // 5. Tracking & Auxiliary Models
@@ -93,7 +95,7 @@ const Banner = resolveModel(rawBanner, 'Banner', {
   badge: String,
   img: String,
   bg: String,
-  priority: { type: Number, default: 100 } // 🟢 1 comes first
+  priority: { type: Number, default: 100 }
 }, 'banners');
 
 let rawReview; try { rawReview = require('./models/reviewModel'); } catch (e) {}
@@ -438,7 +440,7 @@ app.delete('/api/auth/admin-users/:id', async (req, res) => {
 });
 
 // =========================================================================
-// 🟢 3. PRODUCTS MANAGEMENT (SORTED BY PRIORITY ASCENDING: 1, 2, 3...)
+// 🟢 3. PRODUCTS MANAGEMENT (WITH MULTIPLE GALLERY IMAGES & PRIORITY SORT)
 // =========================================================================
 
 app.get('/api/products', async (req, res) => {
@@ -453,14 +455,27 @@ app.get('/api/products', async (req, res) => {
 
 app.post('/api/products', async (req, res) => {
   try {
-    const { name, price, category, description, image, countInStock, stock, rating, priority } = req.body;
+    const { name, price, category, description, image, images, countInStock, stock, rating, priority } = req.body;
+    
+    // Multi-image array normalization
+    let galleryImages = [];
+    if (Array.isArray(images) && images.length > 0) {
+      galleryImages = images.filter(Boolean);
+    } else if (image) {
+      galleryImages = [image];
+    }
+
+    const coverImage = (galleryImages.length > 0) ? galleryImages[0] : (image || '');
+
     const newProd = new Product({
       name,
       price: Number(price) || 0,
       category: category || 'General',
       description: description || '',
-      image: image || '',
+      image: coverImage,
+      images: galleryImages,
       countInStock: Number(stock) || Number(countInStock) || 10,
+      stock: Number(stock) || Number(countInStock) || 10,
       rating: Number(rating) || 4.5,
       priority: priority !== undefined && priority !== '' ? Number(priority) : 100
     });
@@ -471,7 +486,7 @@ app.post('/api/products', async (req, res) => {
   }
 });
 
-// 🟢 BULLET-PROOF FULL PRODUCT & PRIORITY UPDATE (INSTANT PERMANENT SAVE IN MONGODB)
+// 🟢 BULLET-PROOF FULL PRODUCT & MULTI-IMAGE UPDATE
 app.put('/api/products/:id', async (req, res) => {
   try {
     const updateData = { ...req.body };
@@ -487,6 +502,16 @@ app.put('/api/products/:id', async (req, res) => {
       const s = Number(updateData.stock !== undefined ? updateData.stock : updateData.countInStock) || 0;
       updateData.stock = s;
       updateData.countInStock = s;
+    }
+
+    // Multi-images array handling
+    if (updateData.images && Array.isArray(updateData.images)) {
+      updateData.images = updateData.images.filter(Boolean);
+      if (updateData.images.length > 0 && !updateData.image) {
+        updateData.image = updateData.images[0];
+      }
+    } else if (updateData.image && (!updateData.images || updateData.images.length === 0)) {
+      updateData.images = [updateData.image];
     }
 
     const updated = await Product.findByIdAndUpdate(
@@ -533,7 +558,7 @@ app.put('/api/products/:id/priority', async (req, res) => {
 // 🟢 Quick Batch Update Product Priorities API
 app.put('/api/products/priority/batch', async (req, res) => {
   try {
-    const { priorities } = req.body; // Array of { id, priority }
+    const { priorities } = req.body;
     if (Array.isArray(priorities)) {
       for (const item of priorities) {
         if (item.id) {
@@ -580,13 +605,18 @@ app.post('/api/products/bulk-upload', upload.any(), async (req, res) => {
     let count = 0;
     for (const item of productsToInsert) {
       if (item.name || item.title) {
+        const primaryImg = item.image || item.imageUrl || '';
+        const galleryImgs = item.images ? (Array.isArray(item.images) ? item.images : String(item.images).split('|')) : [primaryImg];
+
         await Product.create({
           name: item.name || item.title,
           price: Number(item.price) || 0,
           category: item.category || 'General',
           description: item.description || '',
-          image: item.image || item.imageUrl || '',
+          image: primaryImg,
+          images: galleryImgs.filter(Boolean),
           countInStock: Number(item.stock) || Number(item.countInStock) || 10,
+          stock: Number(item.stock) || Number(item.countInStock) || 10,
           rating: Number(item.rating) || 4.5,
           priority: item.priority !== undefined ? Number(item.priority) : 100
         });
@@ -626,7 +656,6 @@ app.post('/api/products/upload', upload.single('image'), (req, res) => {
 
 app.get('/api/banners', async (req, res) => {
   try {
-    // 🟢 Priority 1 banner shows first in slider
     const banners = await Banner.find({}).sort({ priority: 1, createdAt: -1 });
     return res.status(200).json(banners);
   } catch (err) {
@@ -806,7 +835,7 @@ app.delete('/api/coupons/:id', async (req, res) => {
 });
 
 app.get('/', (req, res) => {
-  res.send('🚀 TechStore Single Central Backend is Active with Product & Banner Priority Support!');
+  res.send('🚀 TechStore Central Backend Active with Multi-Image Product Gallery & Priority Support!');
 });
 
 // =========================================================================
