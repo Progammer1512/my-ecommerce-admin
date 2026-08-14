@@ -251,10 +251,11 @@ app.delete('/api/auth/profile', async (req, res) => {
   }
 });
 
-// Fetch Customers List for Admin Dashboard
-app.get('/api/auth/customers', async (req, res) => {
+// 🟢 Fetch All Store Customers for Admin Intelligence (Supports all frontend route variants)
+app.get(['/api/auth/customers', '/api/customers', '/api/admin/customers', '/api/users'], async (req, res) => {
   try {
     const users = await User.find({}, 'name email mobile address pincode createdAt').sort({ createdAt: -1 }).lean();
+    
     const customers = await Promise.all(users.map(async (u) => {
       const cartRecord = await AbandonedCart.findOne({ userEmail: u.email }).lean();
       const wishlistRecord = await WishlistRecord.findOne({ userEmail: u.email }).lean();
@@ -264,8 +265,10 @@ app.get('/api/auth/customers', async (req, res) => {
         wishlist: wishlistRecord ? wishlistRecord.wishlistItems : []
       };
     }));
+    
     return res.status(200).json(customers);
   } catch (error) {
+    console.error("Fetch Customers Error:", error);
     return res.status(500).json({ message: 'Failed to fetch customers: ' + error.message });
   }
 });
