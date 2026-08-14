@@ -67,7 +67,7 @@ const Product = resolveModel(rawProd, 'Product', {
   rating: { type: Number, default: 4.5 }
 }, 'products');
 
-// 5. Auxiliary Tracking Models
+// 5. Auxiliary Tracking Models (Cart & Wishlist)
 let rawCart; try { rawCart = require('./models/AbandonedCart'); } catch (e) {}
 const AbandonedCart = resolveModel(rawCart, 'AbandonedCart', {
   userEmail: { type: String, required: true, lowercase: true, trim: true },
@@ -95,7 +95,7 @@ const Coupon = resolveModel(rawCoupon, 'Coupon', { code: { type: String, require
 
 const app = express();
 
-// Middlewares
+// Global Middlewares
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
@@ -243,7 +243,71 @@ app.post('/api/auth/login', async (req, res) => {
   }
 });
 
-// Profile & Cart/Wishlist Sync
+// =========================================================================
+// 🟢 2. REAL-TIME WISHLIST & CART PERSISTENCE APIS
+// =========================================================================
+
+// Fetch Wishlist
+app.get(['/api/auth/wishlist', '/api/wishlist'], async (req, res) => {
+  try {
+    const email = (req.query.email || '').toLowerCase().trim();
+    if (!email) return res.status(200).json({ wishlist: [] });
+    const record = await WishlistRecord.findOne({ userEmail: email }).lean();
+    return res.status(200).json({ wishlist: record ? record.wishlistItems : [] });
+  } catch (err) {
+    return res.status(500).json({ message: 'Failed to fetch wishlist' });
+  }
+});
+
+// Save / Sync Wishlist
+app.post(['/api/auth/wishlist', '/api/wishlist'], async (req, res) => {
+  try {
+    const { email, wishlist, name, mobile } = req.body;
+    if (!email) return res.status(400).json({ message: 'Email required for wishlist sync' });
+    const cleanEmail = email.toLowerCase().trim();
+
+    await WishlistRecord.findOneAndUpdate(
+      { userEmail: cleanEmail },
+      { $set: { userName: name || '', mobile: mobile || '', wishlistItems: wishlist || [] } },
+      { upsert: true, new: true }
+    );
+    return res.status(200).json({ message: 'Wishlist synced successfully!' });
+  } catch (err) {
+    return res.status(500).json({ message: 'Failed to save wishlist: ' + err.message });
+  }
+});
+
+// Fetch Cart
+app.get(['/api/auth/cart', '/api/cart'], async (req, res) => {
+  try {
+    const email = (req.query.email || '').toLowerCase().trim();
+    if (!email) return res.status(200).json({ cart: [] });
+    const record = await AbandonedCart.findOne({ userEmail: email }).lean();
+    return res.status(200).json({ cart: record ? record.cartItems : [] });
+  } catch (err) {
+    return res.status(500).json({ message: 'Failed to fetch cart' });
+  }
+});
+
+// Save / Sync Cart
+app.post(['/api/auth/cart', '/api/cart'], async (req, res) => {
+  try {
+    const { email, cart, name, mobile } = req.body;
+    if (!email) return res.status(400).json({ message: 'Email required for cart sync' });
+    const cleanEmail = email.toLowerCase().trim();
+
+    await AbandonedCart.findOneAndUpdate(
+      { userEmail: cleanEmail },
+      { $set: { userName: name || '', mobile: mobile || '', cartItems: cart || [] } },
+      { upsert: true, new: true }
+    );
+    return res.status(200).json({ message: 'Cart synced successfully!' });
+  } catch (err) {
+    return res.status(500).json({ message: 'Failed to save cart: ' + err.message });
+  }
+});
+
+// Profile & Multi-Attribute Sync
 app.put('/api/auth/profile', async (req, res) => {
   try {
     const { email, name, mobile, address, pincode, cart, wishlist } = req.body;
@@ -320,7 +384,7 @@ app.get(['/api/auth/customers', '/api/customers', '/api/admin/customers', '/api/
 });
 
 // =========================================================================
-// 🟢 2. ADMIN USERS MANAGEMENT ('adminusers' COLLECTION)
+// 🟢 3. ADMIN USERS MANAGEMENT ('adminusers' COLLECTION)
 // =========================================================================
 
 // Register Admin User
@@ -383,7 +447,7 @@ app.delete('/api/auth/admin-users/:id', async (req, res) => {
 });
 
 // =========================================================================
-// 🟢 3. ORDERS APIS (FIXED & SAFE)
+// 🟢 4. ORDERS APIS
 // =========================================================================
 
 app.get('/api/orders', async (req, res) => {
@@ -430,7 +494,7 @@ app.put('/api/orders/:id/return', async (req, res) => {
 });
 
 // =========================================================================
-// 🟢 4. PRODUCTS & BULK UPLOAD APIS
+// 🟢 5. PRODUCTS & BULK UPLOAD APIS
 // =========================================================================
 
 app.get('/api/products', async (req, res) => {
@@ -542,7 +606,7 @@ app.post('/api/products/upload', upload.single('image'), (req, res) => {
 });
 
 // =========================================================================
-// 🟢 5. BANNERS, REVIEWS & COUPONS APIS
+// 🟢 6. BANNERS, REVIEWS & COUPONS APIS
 // =========================================================================
 
 app.get('/api/banners', async (req, res) => {
