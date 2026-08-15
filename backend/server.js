@@ -971,7 +971,6 @@ app.post('/api/ai/chat', async (req, res) => {
     }
 
     const query = message.trim();
-    // Search products matching name or description
     const matchedProducts = await Product.find({
       $or: [
         { name: { $regex: query, $options: 'i' } },
@@ -1002,7 +1001,7 @@ app.post('/api/ai/chat', async (req, res) => {
           const rawAttrs = v.attributes instanceof Map ? Object.fromEntries(v.attributes) : (v.attributes || {});
           const attrStr = Object.entries(rawAttrs).map(([k, val]) => `${k}: ${val}`).join(', ');
           const optionLabel = attrStr || (v.size ? `Size: ${v.size}` : '') || (v.color ? `Color: ${v.color}` : `Variant #${vIdx + 1}`);
-          responseText.h += `  • [${optionLabel}] - ₹${v.price} (Stock: ${v.stock})\n`;
+          responseText += `  • [${optionLabel}] - ₹${v.price} (Stock: ${v.stock})\n`;
         });
       }
       responseText += `\n`;
