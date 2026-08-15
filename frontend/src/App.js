@@ -80,7 +80,7 @@ function App() {
 
   const [coupons, setCoupons] = useState([]);
 
-  // 🟢 PRODUCT STATE & MULTIPLE IMAGES GALLERY
+  // 🟢 PRODUCT STATE & MULTIPLE IMAGES GALLERY (MAIN PRODUCT)
   const [editingId, setEditingId] = useState(null);
   const [name, setName] = useState('');
   const [price, setPrice] = useState('');
@@ -93,13 +93,15 @@ function App() {
   const [productPriority, setProductPriority] = useState(100);
   const [rankInputs, setRankInputs] = useState({});
 
-  // 🟢 100% DYNAMIC ATTRIBUTES & VARIANTS BUILDER
+  // 🟢 100% DYNAMIC ATTRIBUTES & MULTI-IMAGE VARIANTS BUILDER
   const [dynamicAttributeNames, setDynamicAttributeNames] = useState(['Size', 'Color']);
   const [newAttributeNameInput, setNewAttributeNameInput] = useState('');
   const [variants, setVariants] = useState([]);
   const [variantInputs, setVariantInputs] = useState({});
   const [variantPrice, setVariantPrice] = useState('');
   const [variantStock, setVariantStock] = useState('');
+  const [variantImages, setVariantImages] = useState([]);
+  const [variantUrlInput, setVariantUrlInput] = useState('');
 
   // 🟢 BANNER STATE (WITH PRIORITY RANK)
   const [bannerTitle, setBannerTitle] = useState('');
@@ -487,7 +489,7 @@ function App() {
     { name: 'Sun', Revenue: 3490, Orders: 4 },
   ];
 
-  // 🟢 COMPRESS & UPLOAD MULTIPLE IMAGES
+  // 🟢 COMPRESS & UPLOAD MULTIPLE IMAGES (FOR MAIN COVER & MAIN GALLERY)
   const handleMultipleImageUpload = (e) => {
     const files = Array.from(e.target.files);
     if (!files.length) return;
@@ -541,6 +543,48 @@ function App() {
     }
   };
 
+  // 🟢 COMPRESS & UPLOAD MULTIPLE IMAGES FOR A SPECIFIC VARIANT
+  const handleVariantMultiImageUpload = (e) => {
+    const files = Array.from(e.target.files);
+    if (!files.length) return;
+
+    files.forEach((file) => {
+      if (file.size > 5 * 1024 * 1024) {
+        alert(`File ${file.name} is too large (>5MB).`);
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = (event) => {
+        const img = new Image();
+        img.src = event.target.result;
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          const MAX_WIDTH = 1000;
+          const scale = MAX_WIDTH / img.width;
+          canvas.width = scale < 1 ? MAX_WIDTH : img.width;
+          canvas.height = scale < 1 ? img.height * scale : img.height;
+
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+          const compressedBase64 = canvas.toDataURL('image/jpeg', 0.7);
+          setVariantImages((prev) => [...prev, compressedBase64]);
+        };
+      };
+    });
+  };
+
+  const handleAddVariantImageUrl = () => {
+    if (!variantUrlInput.trim()) return;
+    setVariantImages((prev) => [...prev, variantUrlInput.trim()]);
+    setVariantUrlInput('');
+  };
+
+  const handleRemoveVariantImage = (indexToRemove) => {
+    setVariantImages(variantImages.filter((_, idx) => idx !== indexToRemove));
+  };
+
   // 🟢 DYNAMIC ATTRIBUTE NAMES HANDLER (e.g. Size, Capacity, Weight, Speed)
   const handleAddAttributeName = () => {
     if (!newAttributeNameInput.trim()) return;
@@ -555,7 +599,7 @@ function App() {
     setDynamicAttributeNames(dynamicAttributeNames.filter(a => a !== attrName));
   };
 
-  // 🟢 ADD DYNAMIC VARIANT OPTION (WITH SMART AUTO-CALCULATE FOR BASE PRICE & TOTAL STOCK)
+  // 🟢 ADD DYNAMIC VARIANT OPTION (WITH ITS OWN DEDICATED MULTI-IMAGE GALLERY)
   const handleAddDynamicVariant = () => {
     const parsedPrice = Number(variantPrice);
     const parsedStock = Number(variantStock);
@@ -570,12 +614,16 @@ function App() {
       currentAttrs[attr] = (variantInputs[attr] || 'Standard').trim();
     });
 
+    const finalVarImgs = variantImages.length > 0 ? variantImages : (image ? [image] : []);
+
     const newOption = {
       attributes: currentAttrs,
       color: currentAttrs['Color'] || currentAttrs['color'] || '',
       size: currentAttrs['Size'] || currentAttrs['size'] || '',
       price: parsedPrice,
-      stock: isNaN(parsedStock) ? 0 : parsedStock
+      stock: isNaN(parsedStock) ? 0 : parsedStock,
+      image: finalVarImgs.length > 0 ? finalVarImgs[0] : '',
+      images: finalVarImgs
     };
 
     const updatedVariants = [...variants, newOption];
@@ -589,6 +637,8 @@ function App() {
 
     setVariantPrice('');
     setVariantStock('');
+    setVariantImages([]);
+    setVariantUrlInput('');
   };
 
   const handleRemoveVariant = (indexToRemove) => {
@@ -796,7 +846,7 @@ function App() {
     }
   };
 
-  // 🟢 SAVE PRODUCT WITH NESTED PATHS & DYNAMIC ATTRIBUTES (AUTO-SYNC INTEGRATED)
+  // 🟢 SAVE PRODUCT (SMART PRICE/STOCK CALCULATION & FULL VARIANT MULTI-IMAGE SYNC)
   const handleProductSubmit = async (e) => {
     e.preventDefault();
     
@@ -831,10 +881,10 @@ function App() {
     try {
       if (editingId) {
         await axios.put(`${BASE_URL}/api/products/${editingId}`, productData, getAuthHeader());
-        alert(`✅ Product '${name}' Updated with Dynamic Variants & Multi-Images!`);
+        alert(`✅ Product '${name}' Updated with Dedicated Variant Galleries!`);
       } else {
         await axios.post(`${BASE_URL}/api/products`, productData, getAuthHeader());
-        alert(`🎉 New Product Created with Dynamic Variants!`);
+        alert(`🎉 New Product Created with Variant Galleries!`);
       }
       resetProductForm();
       fetchData();
@@ -897,7 +947,20 @@ function App() {
     setImage(primaryImg);
     setImages(galleryImgs);
     setDynamicAttributeNames(Array.isArray(p.dynamicAttributeNames) && p.dynamicAttributeNames.length > 0 ? p.dynamicAttributeNames : ['Size', 'Color']);
-    setVariants(Array.isArray(p.variants) ? p.variants : []);
+    
+    // Parse variants with images
+    const loadedVariants = Array.isArray(p.variants) ? p.variants.map(v => {
+      const varImgs = Array.isArray(v.images) && v.images.length > 0 
+        ? v.images.map(getCleanImageUrl) 
+        : (v.image ? [getCleanImageUrl(v.image)] : []);
+      return {
+        ...v,
+        image: varImgs.length > 0 ? varImgs[0] : '',
+        images: varImgs
+      };
+    }) : [];
+
+    setVariants(loadedVariants);
     setProductPriority(p.priority !== undefined ? Number(p.priority) : 100);
     
     const fetchedStock = p.countInStock !== undefined ? p.countInStock : (p.stock !== undefined ? p.stock : 0);
@@ -927,9 +990,12 @@ function App() {
     setVariantInputs({});
     setVariantPrice('');
     setVariantStock('');
+    setVariantImages([]);
+    setVariantUrlInput('');
     setNewImageUrlInput('');
     setStock(0);
     setProductPriority(100);
+    setShowInlineCategoryInput(false);
   };
 
   const handleOrderStatusChange = async (orderId, newStatus) => {
@@ -1492,8 +1558,8 @@ function App() {
                   <form onSubmit={handleProductSubmit}>
                     
                     <div className="mb-2">
-                      <label className="form-label fw-semibold">Title</label>
-                      <input type="text" className="form-control" required value={name} onChange={(e) => setName(e.target.value)} />
+                      <label className="form-label fw-semibold">Product Title</label>
+                      <input type="text" className="form-control" required value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Graphics Card RTX Series" />
                     </div>
 
                     <div className="row mb-2">
@@ -1512,7 +1578,7 @@ function App() {
                       </div>
                       <div className="col-6">
                         <label className="form-label fw-semibold">
-                          Base Stock {variants.length > 0 && <span className="badge bg-info text-dark" style={{ fontSize: '9px' }}>Auto (Sum)</span>}
+                          Total Stock {variants.length > 0 && <span className="badge bg-info text-dark" style={{ fontSize: '9px' }}>Auto (Sum)</span>}
                         </label>
                         <input 
                           type="number" 
@@ -1586,10 +1652,10 @@ function App() {
                       </div>
                     )}
 
-                    {/* 📸 MULTIPLE GALLERY IMAGES SECTION */}
+                    {/* 📸 MAIN / COVER PRODUCT IMAGES SECTION */}
                     <div className="mb-3 p-3 bg-light rounded border">
                       <label className="form-label fw-bold text-primary d-flex align-items-center justify-content-between m-0 mb-2">
-                        <span>📸 Product Images (Front, Back, Sides)</span>
+                        <span>📸 Main Cover Product Images (Front, Back, Sides)</span>
                         <span className="badge bg-primary">{images.length} Added</span>
                       </label>
                       
@@ -1643,7 +1709,7 @@ function App() {
                       )}
                     </div>
 
-                    {/* 🟢 100% DYNAMIC ATTRIBUTES & CUSTOM VARIANT PRICING */}
+                    {/* 🟢 100% DYNAMIC ATTRIBUTES & DEDICATED VARIANT MULTI-IMAGE GALLERY BUILDER */}
                     <div className="mb-3 p-3 bg-light rounded border border-primary border-opacity-25">
                       <div className="d-flex justify-content-between align-items-center mb-2">
                         <label className="form-label fw-bold text-primary m-0">
@@ -1655,7 +1721,7 @@ function App() {
                         <input 
                           type="text" 
                           className="form-control" 
-                          placeholder="Type Parameter Name (e.g. Capacity, Speed, Weight, Size)"
+                          placeholder="Type Parameter Name (e.g. Model, VRAM, Color, Size)"
                           value={newAttributeNameInput} 
                           onChange={(e) => setNewAttributeNameInput(e.target.value)} 
                         />
@@ -1673,8 +1739,12 @@ function App() {
                         ))}
                       </div>
 
-                      <div className="p-2 border rounded bg-white mb-2">
-                        <span className="small fw-bold text-dark d-block mb-1">Enter Values & Custom Price for Option:</span>
+                      {/* Variant Input Box with dedicated multi-image gallery */}
+                      <div className="p-3 border rounded bg-white mb-2 shadow-sm">
+                        <span className="small fw-bold text-dark d-block mb-2">
+                          Enter Values, Custom Price & Dedicated Gallery for this Variant:
+                        </span>
+                        
                         <div className="row g-2 mb-2">
                           {dynamicAttributeNames.map((attr, idx) => (
                             <div key={idx} className="col-6">
@@ -1682,7 +1752,7 @@ function App() {
                               <input 
                                 type="text" 
                                 className="form-control form-control-sm fw-bold" 
-                                placeholder={`e.g. ${attr === 'Size' ? 'XL' : attr === 'Capacity' ? '1 TB' : 'Val'}`}
+                                placeholder={`e.g. ${attr === 'Model' ? 'RTX 4070' : attr === 'VRAM' ? '12GB' : 'Val'}`}
                                 value={variantInputs[attr] || ''} 
                                 onChange={(e) => setVariantInputs({ ...variantInputs, [attr]: e.target.value })} 
                               />
@@ -1709,21 +1779,67 @@ function App() {
                             />
                           </div>
                         </div>
+
+                        {/* 📸 Dedicated Gallery for this Specific Variant */}
+                        <div className="p-2 border rounded bg-light mb-2">
+                          <label className="form-label fw-bold small text-primary d-flex justify-content-between m-0 mb-1">
+                            <span>📸 Photos for THIS Specific Variant ({variantImages.length} Added):</span>
+                          </label>
+                          <div className="input-group input-group-sm mb-1">
+                            <input 
+                              type="text" 
+                              className="form-control" 
+                              placeholder="Paste variant image URL (https://...)" 
+                              value={variantUrlInput} 
+                              onChange={(e) => setVariantUrlInput(e.target.value)} 
+                            />
+                            <button type="button" className="btn btn-outline-primary fw-bold" onClick={handleAddVariantImageUrl}>
+                              + Add URL
+                            </button>
+                          </div>
+                          <input 
+                            type="file" 
+                            className="form-control form-control-sm" 
+                            accept="image/*" 
+                            multiple 
+                            onChange={handleVariantMultiImageUpload} 
+                          />
+                          {variantImages.length > 0 && (
+                            <div className="d-flex flex-wrap gap-1 mt-2">
+                              {variantImages.map((img, i) => (
+                                <div key={i} className="position-relative border rounded p-1 bg-white" style={{ width: '45px', height: '45px' }}>
+                                  <img src={getCleanImageUrl(img)} alt="Var Preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                  <button 
+                                    type="button" 
+                                    className="btn btn-danger btn-sm p-0 rounded-circle position-absolute top-0 end-0 d-flex align-items-center justify-content-center"
+                                    style={{ width: '14px', height: '14px', fontSize: '8px' }}
+                                    onClick={() => handleRemoveVariantImage(i)}
+                                  >
+                                    ✕
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+
                         <button 
                           type="button" 
-                          className="btn btn-sm btn-outline-primary fw-bold w-100 py-1"
+                          className="btn btn-sm btn-primary fw-bold w-100 py-2 shadow-sm"
                           onClick={handleAddDynamicVariant}
                         >
-                          + Add This Combination
+                          + Add This Variant & Dedicated Photos
                         </button>
                       </div>
 
+                      {/* Configured Variants Table with Multi-Image Strip */}
                       {variants.length > 0 && (
-                        <div className="table-responsive border rounded bg-white">
+                        <div className="table-responsive border rounded bg-white mt-3">
                           <table className="table table-sm table-bordered m-0 align-middle">
                             <thead className="table-secondary text-nowrap">
                               <tr>
-                                <th>Configured Attributes</th>
+                                <th>Option / Specs</th>
+                                <th>Variant Photos</th>
                                 <th>Price (₹)</th>
                                 <th>Stock</th>
                                 <th className="text-center">Action</th>
@@ -1735,9 +1851,30 @@ function App() {
                                   .map(([k, val]) => `${k}: ${val}`)
                                   .join(' | ') || (v.size ? `Size: ${v.size}` : 'Standard');
 
+                                const vImgs = Array.isArray(v.images) && v.images.length > 0 ? v.images : (v.image ? [v.image] : []);
+
                                 return (
                                   <tr key={idx}>
                                     <td className="small fw-bold">{attrDisplay}</td>
+                                    <td>
+                                      <div className="d-flex flex-wrap gap-1">
+                                        {vImgs.length === 0 ? (
+                                          <span className="text-muted small" style={{ fontSize: '10px' }}>Default Cover</span>
+                                        ) : (
+                                          vImgs.map((imgUrl, i) => (
+                                            <img 
+                                              key={i} 
+                                              src={getCleanImageUrl(imgUrl)} 
+                                              alt={`Thumb ${i}`} 
+                                              width="28" 
+                                              height="28" 
+                                              className="rounded border" 
+                                              style={{ objectFit: 'cover' }} 
+                                            />
+                                          ))
+                                        )}
+                                      </div>
+                                    </td>
                                     <td className="text-success fw-bold">₹{v.price}</td>
                                     <td>{v.stock}</td>
                                     <td className="text-center">
