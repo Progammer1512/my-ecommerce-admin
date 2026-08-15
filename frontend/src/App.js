@@ -54,6 +54,12 @@ function App() {
   const [customersList, setCustomersList] = useState([]);
   const [csvFile, setCsvFile] = useState(null);
 
+  // 🌳 NESTED CATEGORIES ENGINE STATES
+  const [categoryTree, setCategoryTree] = useState([]);
+  const [rawCategoriesList, setRawCategoriesList] = useState([]);
+  const [selectedParentCategory, setSelectedParentCategory] = useState('');
+  const [newNestedCategoryName, setNewNestedCategoryName] = useState('');
+
   // ADMIN USERS MANAGEMENT STATES
   const [adminUsersList, setAdminUsersList] = useState([]);
   const [showAddAdminModal, setShowAddAdminModal] = useState(false);
@@ -70,29 +76,26 @@ function App() {
   const [personalCouponCode, setPersonalCouponCode] = useState('');
   const [personalCouponDiscount, setPersonalCouponDiscount] = useState('20');
 
-  const [categories, setCategories] = useState(['Electronics', 'Footwear', 'Accessories', 'Fashion']);
-  const [showCustomCategory, setShowCustomCategory] = useState(false);
-  const [newCategoryInput, setNewCategoryInput] = useState('');
-
   const [coupons, setCoupons] = useState([]);
 
   // 🟢 PRODUCT STATE & MULTIPLE IMAGES GALLERY
   const [editingId, setEditingId] = useState(null);
   const [name, setName] = useState('');
   const [price, setPrice] = useState('');
-  const [category, setCategory] = useState('Electronics');
+  const [selectedCategoryPath, setSelectedCategoryPath] = useState(['General']);
   const [description, setDescription] = useState('');
-  const [image, setImage] = useState(''); // Primary Cover
-  const [images, setImages] = useState([]); // 📸 Gallery Array
+  const [image, setImage] = useState('');
+  const [images, setImages] = useState([]);
   const [newImageUrlInput, setNewImageUrlInput] = useState('');
   const [stock, setStock] = useState(0);
   const [productPriority, setProductPriority] = useState(100);
   const [rankInputs, setRankInputs] = useState({});
 
-  // 🟢 VARIANTS & CUSTOM PRICING STATE (Size/Color/Price/Stock)
+  // 🟢 100% DYNAMIC ATTRIBUTES & VARIANTS BUILDER
+  const [dynamicAttributeNames, setDynamicAttributeNames] = useState(['Size', 'Color']);
+  const [newAttributeNameInput, setNewAttributeNameInput] = useState('');
   const [variants, setVariants] = useState([]);
-  const [variantColor, setVariantColor] = useState('');
-  const [variantSize, setVariantSize] = useState('M');
+  const [variantInputs, setVariantInputs] = useState({});
   const [variantPrice, setVariantPrice] = useState('');
   const [variantStock, setVariantStock] = useState('');
 
@@ -259,8 +262,16 @@ function App() {
         : [];
       setProducts(sortedProducts);
 
-      const existingCategories = Array.isArray(fetchedProducts) ? fetchedProducts.map(p => p.category).filter(Boolean) : [];
-      setCategories(prev => Array.from(new Set([...prev, ...existingCategories])));
+      // Fetch Nested Categories Tree
+      try {
+        const catRes = await axios.get(`${BASE_URL}/api/categories`, authConfig);
+        if (catRes.data && catRes.data.tree) {
+          setCategoryTree(catRes.data.tree);
+          setRawCategoriesList(catRes.data.categories || []);
+        }
+      } catch (catErr) {
+        console.warn("Categories fetch fallback");
+      }
 
       const orderRes = await axios.get(`${BASE_URL}/api/orders`, authConfig);
       const fetchedOrders = Array.isArray(orderRes.data) ? orderRes.data : (orderRes.data.orders || []);
@@ -311,6 +322,39 @@ function App() {
       return () => clearInterval(interval);
     }
   }, [user]);
+
+  // 🟢 CREATE NESTED SUB-CATEGORY
+  const handleCreateCategory = async (e) => {
+    e.preventDefault();
+    if (!newNestedCategoryName.trim()) return alert("Category Name is required!");
+
+    try {
+      const res = await axios.post(`${BASE_URL}/api/categories`, {
+        name: newNestedCategoryName.trim(),
+        parentId: selectedParentCategory || null
+      }, getAuthHeader());
+
+      alert(`🎉 Category '${newNestedCategoryName}' Created Successfully!`);
+      setCategoryTree(res.data.tree || []);
+      setNewNestedCategoryName('');
+      setSelectedParentCategory('');
+      fetchData();
+    } catch (err) {
+      alert("Failed to create category: " + (err.response?.data?.message || err.message));
+    }
+  };
+
+  const handleDeleteCategory = async (catId) => {
+    if (window.confirm("⚠️ Delete this category and all its nested sub-categories?")) {
+      try {
+        const res = await axios.delete(`${BASE_URL}/api/categories/${catId}`, getAuthHeader());
+        setCategoryTree(res.data.tree || []);
+        fetchData();
+      } catch (err) {
+        alert("Failed to delete category: " + err.message);
+      }
+    }
+  };
 
   const handleSaveAdminUser = async (e) => {
     e.preventDefault();
@@ -455,30 +499,49 @@ function App() {
     }
   };
 
-  // 🟢 ADD & REMOVE PRODUCT VARIANTS (Size, Color, Price, Stock)
-  const handleAddVariantOption = () => {
+  // 🟢 DYNAMIC ATTRIBUTE NAMES HANDLER (e.g. Size, Capacity, Weight, Speed)
+  const handleAddAttributeName = () => {
+    if (!newAttributeNameInput.trim()) return;
+    const cleanName = newAttributeNameInput.trim();
+    if (!dynamicAttributeNames.includes(cleanName)) {
+      setDynamicAttributeNames([...dynamicAttributeNames, cleanName]);
+    }
+    setNewAttributeNameInput('');
+  };
+
+  const handleRemoveAttributeName = (attrName) => {
+    setDynamicAttributeNames(dynamicAttributeNames.filter(a => a !== attrName));
+  };
+
+  // 🟢 ADD DYNAMIC VARIANT OPTION (Size / Color / Capacity / Speed)
+  const handleAddDynamicVariant = () => {
     const parsedPrice = Number(variantPrice);
     const parsedStock = Number(variantStock);
 
     if (isNaN(parsedPrice) || parsedPrice <= 0) {
-      alert("⚠️ Please enter a valid price for this variant!");
+      alert("⚠️ Please enter a valid Price (₹) for this variant option!");
       return;
     }
 
+    const currentAttrs = {};
+    dynamicAttributeNames.forEach(attr => {
+      currentAttrs[attr] = (variantInputs[attr] || 'Standard').trim();
+    });
+
     const newOption = {
-      color: variantColor.trim(),
-      size: variantSize.trim().toUpperCase(),
+      attributes: currentAttrs,
+      color: currentAttrs['Color'] || currentAttrs['color'] || '',
+      size: currentAttrs['Size'] || currentAttrs['size'] || '',
       price: parsedPrice,
       stock: isNaN(parsedStock) ? 0 : parsedStock
     };
 
     setVariants([...variants, newOption]);
-    setVariantColor('');
     setVariantPrice('');
     setVariantStock('');
   };
 
-  const handleRemoveVariantOption = (indexToRemove) => {
+  const handleRemoveVariant = (indexToRemove) => {
     setVariants(variants.filter((_, idx) => idx !== indexToRemove));
   };
 
@@ -569,94 +632,6 @@ function App() {
     }
   };
 
-  const handleCategoryChange = (e) => {
-    const value = e.target.value;
-    if (value === 'ADD_NEW') {
-      setShowCustomCategory(true);
-    } else {
-      setShowCustomCategory(false);
-      setCategory(value);
-    }
-  };
-
-  const handleAddNewCategory = () => {
-    if (!newCategoryInput.trim()) return alert('Category name cannot be empty!');
-    const trimmed = newCategoryInput.trim();
-    if (!categories.includes(trimmed)) {
-      setCategories([...categories, trimmed]);
-    }
-    setCategory(trimmed);
-    setNewCategoryInput('');
-    setShowCustomCategory(false);
-  };
-
-  const handleCsvUpload = (e) => {
-    e.preventDefault();
-    if (!csvFile) return alert('Please select a CSV file first!');
-
-    Papa.parse(csvFile, {
-      header: true,
-      skipEmptyLines: true,
-      transformHeader: (h) => h.trim().toLowerCase().replace(/^\ufeff/, ''),
-      complete: async (results) => {
-        const rows = results.data;
-        if (!rows || rows.length === 0) {
-          return alert('CSV file is empty or missing data rows!');
-        }
-
-        const authConfig = getAuthHeader();
-
-        try {
-          const uploadPromises = rows.map((row) => {
-            const cleanRow = {};
-            Object.keys(row).forEach((k) => {
-              cleanRow[k.trim().toLowerCase()] = row[k];
-            });
-
-            const rawName = cleanRow.name || cleanRow.title || 'Imported Item';
-            const rawPrice = parseCleanStock(cleanRow.price);
-            const rawCategory = cleanRow.category || 'General';
-            
-            const rawDesc = (cleanRow.description && String(cleanRow.description).trim().length > 0) 
-              ? String(cleanRow.description).trim() 
-              : `High quality verified ${rawCategory} product.`;
-
-            const rawImage = cleanRow.image || 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=500';
-            const rawImages = cleanRow.images ? cleanRow.images.split('|') : [rawImage];
-            const rawStock = parseCleanStock(cleanRow.stock || cleanRow.countinstock || cleanRow.quantity || cleanRow.qty);
-            const rawPriority = cleanRow.priority ? Number(cleanRow.priority) : 100;
-
-            const productPayload = {
-              name: String(rawName).trim(),
-              price: rawPrice || 999,
-              category: String(rawCategory).trim(),
-              description: rawDesc,
-              image: String(rawImage).trim(),
-              images: rawImages,
-              variants: [],
-              stock: rawStock,
-              countInStock: rawStock,
-              priority: rawPriority
-            };
-
-            return axios.post(`${BASE_URL}/api/products`, productPayload, authConfig);
-          });
-
-          await Promise.all(uploadPromises);
-          alert(`🎉 Successfully uploaded ${rows.length} products to MongoDB!`);
-          setCsvFile(null);
-          fetchData();
-        } catch (error) {
-          console.error('CSV Import Error:', error);
-          alert('Upload Error: ' + (error.response?.data?.message || error.message));
-        }
-      },
-      error: (err) => {
-        alert('Error parsing CSV file: ' + err.message);
-      }
-    });
-  };
-
   const handleBulkDeleteProducts = async (deleteAll = false) => {
     const targets = deleteAll ? products.map(p => p._id || p.id) : selectedProductIds;
     
@@ -698,7 +673,7 @@ function App() {
     }
   };
 
-  // 🟢 SAVE PRODUCT WITH GALLERY IMAGES & VARIANTS
+  // 🟢 SAVE PRODUCT WITH NESTED PATHS & DYNAMIC ATTRIBUTES
   const handleProductSubmit = async (e) => {
     e.preventDefault();
     const parsedStock = parseCleanStock(stock);
@@ -707,13 +682,17 @@ function App() {
     const finalImagesList = images.length > 0 ? images : (image ? [image] : []);
     const finalCoverImage = finalImagesList.length > 0 ? finalImagesList[0] : (image || '');
 
+    const primaryCategory = selectedCategoryPath[selectedCategoryPath.length - 1] || 'General';
+
     const productData = { 
       name, 
       price: parseCleanStock(price), 
-      category, 
+      category: primaryCategory,
+      categoryPath: selectedCategoryPath,
       description: description || 'High quality store product.', 
       image: finalCoverImage,
       images: finalImagesList,
+      dynamicAttributeNames,
       variants: variants || [],
       stock: parsedStock,
       countInStock: parsedStock,
@@ -723,10 +702,10 @@ function App() {
     try {
       if (editingId) {
         await axios.put(`${BASE_URL}/api/products/${editingId}`, productData, getAuthHeader());
-        alert(`✅ Product '${name}' Updated with ${variants.length} Variants & ${finalImagesList.length} Images!`);
+        alert(`✅ Product '${name}' Updated with Dynamic Variants & Multi-Images!`);
       } else {
         await axios.post(`${BASE_URL}/api/products`, productData, getAuthHeader());
-        alert(`🎉 New Product Created with ${variants.length} Variants!`);
+        alert(`🎉 New Product Created with Dynamic Variants!`);
       }
       resetProductForm();
       fetchData();
@@ -778,7 +757,7 @@ function App() {
     setEditingId(targetId);
     setName(p.name);
     setPrice(p.price);
-    setCategory(p.category);
+    setSelectedCategoryPath(Array.isArray(p.categoryPath) && p.categoryPath.length > 0 ? p.categoryPath : [p.category || 'General']);
     setDescription(p.description);
     
     const primaryImg = getCleanImageUrl(p.image);
@@ -788,6 +767,7 @@ function App() {
 
     setImage(primaryImg);
     setImages(galleryImgs);
+    setDynamicAttributeNames(Array.isArray(p.dynamicAttributeNames) && p.dynamicAttributeNames.length > 0 ? p.dynamicAttributeNames : ['Size', 'Color']);
     setVariants(Array.isArray(p.variants) ? p.variants : []);
     setProductPriority(p.priority !== undefined ? Number(p.priority) : 100);
     
@@ -810,19 +790,17 @@ function App() {
     setEditingId(null);
     setName('');
     setPrice('');
-    setCategory('Electronics');
+    setSelectedCategoryPath(['General']);
     setDescription('');
     setImage('');
     setImages([]);
     setVariants([]);
-    setVariantColor('');
-    setVariantSize('M');
+    setVariantInputs({});
     setVariantPrice('');
     setVariantStock('');
     setNewImageUrlInput('');
     setStock(0);
     setProductPriority(100);
-    setShowCustomCategory(false);
   };
 
   const handleOrderStatusChange = async (orderId, newStatus) => {
@@ -911,6 +889,39 @@ function App() {
         alert('Delete coupon failed: ' + (err.response?.data?.message || err.message));
       }
     }
+  };
+
+  // Helper to render nested category tree items recursively
+  const renderCategoryTreeUI = (tree, depth = 0) => {
+    return tree.map((node) => (
+      <div key={node._id} style={{ marginLeft: `${depth * 20}px` }} className="border-start ps-2 my-1">
+        <div className="d-flex align-items-center justify-content-between p-2 rounded bg-light border">
+          <div>
+            <span className="fw-bold text-dark">{depth > 0 ? '↳ ' : '📁 '}{node.name}</span>
+          </div>
+          <div className="d-flex gap-1">
+            <button 
+              className="btn btn-sm btn-outline-primary py-0 px-2"
+              style={{ fontSize: '11px' }}
+              onClick={() => {
+                setSelectedParentCategory(node._id);
+                alert(`Selected '${node.name}' as Parent Category. Now enter Sub-Category name!`);
+              }}
+            >
+              + Sub
+            </button>
+            <button 
+              className="btn btn-sm btn-outline-danger py-0 px-1"
+              style={{ fontSize: '11px' }}
+              onClick={() => handleDeleteCategory(node._id)}
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+        {node.children && node.children.length > 0 && renderCategoryTreeUI(node.children, depth + 1)}
+      </div>
+    ));
   };
 
   if (!user) {
@@ -1093,6 +1104,15 @@ function App() {
               </button>
             )}
 
+            {hasTabAccess(userRole, 'categories-tree') && (
+              <button 
+                className={`nav-link text-start fw-bold ${activeTab === 'categories-tree' ? 'active bg-warning text-dark' : 'text-white'}`} 
+                onClick={() => handleTabSelect('categories-tree')}
+              >
+                <i className="bi bi-diagram-3-fill me-2"></i>🌳 Infinite Categories Tree
+              </button>
+            )}
+
             {hasTabAccess(userRole, 'banners') && (
               <button 
                 className={`nav-link text-start fw-bold ${activeTab === 'banners' ? 'active bg-warning text-dark' : 'text-white'}`} 
@@ -1107,7 +1127,7 @@ function App() {
                 className={`nav-link text-start fw-bold ${activeTab === 'products' ? 'active bg-warning text-dark' : 'text-white'}`} 
                 onClick={() => handleTabSelect('products')}
               >
-                <i className="bi bi-box-seam me-2"></i>Products & Variants (PIM)
+                <i className="bi bi-box-seam me-2"></i>Products & Dynamic Variants (PIM)
               </button>
             )}
 
@@ -1167,6 +1187,7 @@ function App() {
       {/* MAIN CONTENT AREA */}
       <div className="flex-grow-1 p-3 p-md-4 overflow-auto" style={{ maxHeight: '100vh', marginTop: '56px' }}>
         
+        {/* DASHBOARD TAB */}
         {activeTab === 'dashboard' && hasTabAccess(userRole, 'dashboard') && (
           <div>
             <h3 className="fw-bold mb-4">Enterprise Analytics Overview</h3>
@@ -1234,179 +1255,488 @@ function App() {
           </div>
         )}
 
-        {/* CUSTOMERS INTELLIGENCE TAB */}
-        {activeTab === 'customers' && (
+        {/* 🟢 🌳 INFINITE NESTED CATEGORIES TAB */}
+        {activeTab === 'categories-tree' && (
           <div>
-            <div className="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
-              <h3 className="fw-bold m-0">👥 Customer Intelligence & Abandoned Recovery</h3>
+            <h3 className="fw-bold mb-4">🌳 Infinite Nested Category & Sub-Category Tree Manager</h3>
+            <div className="row g-4">
               
-              <div className="d-flex align-items-center gap-2">
-                <select 
-                  className="form-select form-select-sm fw-bold border-warning text-dark"
-                  value={customerFilter}
-                  onChange={(e) => setCustomerFilter(e.target.value)}
-                  style={{ width: '250px' }}
-                >
-                  <option value="ALL">🌟 All Store Customers ({customersList.length})</option>
-                  <option value="CART">🛒 Abandoned Cart Customers Only</option>
-                  <option value="WISHLIST">❤️ Wishlist Left Customers Only</option>
-                </select>
+              <div className="col-lg-5">
+                <div className="card border-0 shadow-sm p-4 bg-white">
+                  <h5 className="fw-bold mb-3">➕ Add Category / Sub-Category Branch</h5>
+                  <form onSubmit={handleCreateCategory}>
+                    
+                    <div className="mb-3">
+                      <label className="form-label fw-bold small text-primary">Parent Category (Optional)</label>
+                      <select 
+                        className="form-select fw-semibold"
+                        value={selectedParentCategory}
+                        onChange={(e) => setSelectedParentCategory(e.target.value)}
+                      >
+                        <option value="">📁 Root / Main Category (No Parent)</option>
+                        {rawCategoriesList.map((cat) => (
+                          <option key={cat._id} value={cat._id}>
+                            ↳ Sub-Category under: {cat.name}
+                          </option>
+                        ))}
+                      </select>
+                      <small className="text-muted d-block mt-1" style={{ fontSize: '11px' }}>
+                        * Leave as "Root" to create a main category (e.g. Computers, Fashion, Pets). Select a parent to create sub-category!
+                      </small>
+                    </div>
 
-                <button className="btn btn-outline-primary btn-sm fw-bold" onClick={fetchData}>
-                  <i className="bi bi-arrow-clockwise me-1"></i> Sync Customers
-                </button>
-              </div>
-            </div>
+                    <div className="mb-3">
+                      <label className="form-label fw-bold small">Category / Sub-Category Name</label>
+                      <input 
+                        type="text" 
+                        className="form-control fw-bold" 
+                        required 
+                        placeholder="e.g. Storage Devices, Hard Disks, Dog Food"
+                        value={newNestedCategoryName} 
+                        onChange={(e) => setNewNestedCategoryName(e.target.value)} 
+                      />
+                    </div>
 
-            <div className="card border-0 shadow-sm p-3 bg-white">
-              <div className="table-responsive">
-                <table className="table table-bordered table-hover align-middle m-0">
-                  <thead className="table-dark text-nowrap">
-                    <tr>
-                      <th style={{ minWidth: '180px' }}>Customer Name</th>
-                      <th style={{ minWidth: '220px' }}>Email & Mobile</th>
-                      <th style={{ minWidth: '200px' }}>🛒 Cart Left Items</th>
-                      <th style={{ minWidth: '200px' }}>❤️ Wishlist Saved Items</th>
-                      <th style={{ minWidth: '180px' }}>Action & Recovery</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredCustomers.length === 0 ? (
-                      <tr>
-                        <td colSpan="5" className="text-center py-5 text-muted">
-                          <i className="bi bi-people fs-2 d-block mb-2 text-secondary"></i>
-                          <h5>No customers found matching this filter.</h5>
-                        </td>
-                      </tr>
-                    ) : (
-                      filteredCustomers.map((cust) => (
-                        <tr key={cust._id || cust.email}>
-                          <td className="fw-bold text-dark">{cust.name}</td>
-                          <td>
-                            <span className="fw-semibold text-primary d-block">{cust.email}</span>
-                            <small className="text-muted">{cust.mobile || 'No Mobile Registered'}</small>
-                          </td>
-                          <td>
-                            {cust.cart && cust.cart.length > 0 ? (
-                              <div>
-                                <span className="badge bg-warning text-dark mb-1">{cust.cart.length} Products in Cart</span>
-                                <div className="small text-truncate" style={{ maxWidth: '200px' }}>
-                                  {cust.cart.map(i => i.name).join(', ')}
-                                </div>
-                              </div>
-                            ) : <span className="text-muted small">Empty Cart</span>}
-                          </td>
-                          <td>
-                            {cust.wishlist && cust.wishlist.length > 0 ? (
-                              <div>
-                                <span className="badge bg-danger mb-1">{cust.wishlist.length} Products Wishlisted</span>
-                                <div className="small text-truncate" style={{ maxWidth: '200px' }}>
-                                  {cust.wishlist.map(i => i.name).join(', ')}
-                                </div>
-                              </div>
-                            ) : <span className="text-muted small">No Wishlist</span>}
-                          </td>
-                          <td>
-                            <button 
-                              className="btn btn-sm btn-success fw-bold px-3 py-1 shadow-sm"
-                              onClick={() => {
-                                setSelectedTargetCustomer(cust);
-                                setPersonalCouponCode(`OFFER_${cust.name ? cust.name.split(' ')[0].toUpperCase() : 'USER'}_${Math.floor(100 + Math.random() * 900)}`);
-                                setShowPersonalDiscountModal(true);
-                              }}
-                            >
-                              🎁 Offer Extra Discount
-                            </button>
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
+                    <button type="submit" className="btn btn-primary w-100 fw-bold py-2 shadow-sm">
+                      + Create Category Branch
+                    </button>
+                  </form>
+                </div>
               </div>
+
+              <div className="col-lg-7">
+                <div className="card border-0 shadow-sm p-4 bg-white">
+                  <div className="d-flex justify-content-between align-items-center mb-3">
+                    <h5 className="fw-bold m-0">Live Nested Category Tree Hierarchy</h5>
+                    <button className="btn btn-sm btn-outline-primary fw-bold" onClick={fetchData}>
+                      Sync Tree
+                    </button>
+                  </div>
+
+                  {categoryTree.length === 0 ? (
+                    <div className="text-center py-4 text-muted">
+                      <h5>No categories created yet.</h5>
+                      <p className="small">Use the form on left to create your first root category!</p>
+                    </div>
+                  ) : (
+                    <div className="p-2 border rounded bg-white">
+                      {renderCategoryTreeUI(categoryTree)}
+                    </div>
+                  )}
+                </div>
+              </div>
+
             </div>
           </div>
         )}
 
-        {/* ADMIN USERS MANAGEMENT TAB */}
-        {activeTab === 'admin-users' && (
+        {/* 🟢 PRODUCTS & DYNAMIC VARIANTS TAB */}
+        {activeTab === 'products' && hasTabAccess(userRole, 'products') && (
           <div>
-            <div className="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
-              <h3 className="fw-bold m-0">⚙️ Admin & Staff Users Management</h3>
-              <button 
-                className="btn btn-primary fw-bold btn-sm shadow-sm"
-                onClick={() => {
-                  setEditingAdminUser(null);
-                  setAdminFormData({ name: '', email: '', password: '', role: 'Admin', mobile: '' });
-                  setShowAddAdminModal(true);
-                }}
-              >
-                ➕ Create New Admin / Staff
-              </button>
-            </div>
+            <h3 className="fw-bold mb-4">Product Information & Dynamic Attributes Pricing (PIM)</h3>
 
-            <div className="card border-0 shadow-sm p-3 bg-white">
-              <div className="table-responsive">
-                <table className="table table-bordered table-hover align-middle m-0">
-                  <thead className="table-dark text-nowrap">
-                    <tr>
-                      <th>Name</th>
-                      <th>Email & Mobile</th>
-                      <th>Role / Permission</th>
-                      <th>Created Date</th>
-                      <th className="text-center">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {adminUsersList.length === 0 ? (
-                      <tr>
-                        <td colSpan="5" className="text-center py-5 text-muted">
-                          <i className="bi bi-shield-lock fs-2 d-block mb-2 text-secondary"></i>
-                          <h5>No admin or staff users found in database.</h5>
-                        </td>
-                      </tr>
-                    ) : (
-                      adminUsersList.map((adm) => {
-                        const admId = adm._id || adm.id;
-                        return (
-                          <tr key={admId}>
-                            <td className="fw-bold text-dark">{adm.name}</td>
-                            <td>
-                              <span className="fw-semibold text-primary d-block">{adm.email}</span>
-                              <small className="text-muted">{adm.mobile || 'No Mobile'}</small>
-                            </td>
-                            <td>
-                              <span className={`badge ${adm.role === 'SuperAdmin' ? 'bg-danger' : 'bg-info text-dark'} px-2 py-1`}>
-                                {adm.role || 'Admin'}
-                              </span>
-                            </td>
-                            <td className="small text-muted">
-                              {adm.createdAt ? new Date(adm.createdAt).toLocaleDateString('en-IN') : 'Recent'}
-                            </td>
-                            <td className="text-center" style={{ whiteSpace: 'nowrap' }}>
+            <div className="row g-4">
+              <div className="col-lg-5">
+                <div className="card border-0 shadow-sm p-4 bg-white">
+                  <h5 className="fw-bold mb-3">{editingId ? '✏️ Edit Product' : '➕ Add New Product'}</h5>
+                  <form onSubmit={handleProductSubmit}>
+                    
+                    <div className="mb-2">
+                      <label className="form-label fw-semibold">Title</label>
+                      <input type="text" className="form-control" required value={name} onChange={(e) => setName(e.target.value)} />
+                    </div>
+                    
+                    <div className="row mb-2">
+                      <div className="col-6">
+                        <label className="form-label fw-semibold">Base Price (₹)</label>
+                        <input type="number" className="form-control" required value={price} onChange={(e) => setPrice(e.target.value)} />
+                      </div>
+                      <div className="col-6">
+                        <label className="form-label fw-semibold">Base Stock</label>
+                        <input 
+                          type="number" 
+                          className="form-control" 
+                          required 
+                          value={stock} 
+                          onChange={(e) => setStock(e.target.value)} 
+                        />
+                      </div>
+                    </div>
+
+                    {/* 🟢 CATEGORY HIERARCHY SELECTOR */}
+                    <div className="mb-2">
+                      <label className="form-label fw-bold small text-primary">Select Category Branch</label>
+                      <select 
+                        className="form-select fw-bold"
+                        value={selectedCategoryPath[selectedCategoryPath.length - 1] || 'General'}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setSelectedCategoryPath([val]);
+                        }}
+                      >
+                        <option value="General">General</option>
+                        {rawCategoriesList.map((cat) => (
+                          <option key={cat._id} value={cat.name}>
+                            📁 {cat.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="mb-2">
+                      <label className="form-label fw-bold text-success">⭐ Display Rank</label>
+                      <input 
+                        type="number" 
+                        className="form-control fw-bold border-success" 
+                        min="1" 
+                        placeholder="1 (Top Position)" 
+                        value={productPriority} 
+                        onChange={(e) => setProductPriority(e.target.value)} 
+                      />
+                    </div>
+
+                    {/* 📸 MULTIPLE GALLERY IMAGES SECTION */}
+                    <div className="mb-3 p-3 bg-light rounded border">
+                      <label className="form-label fw-bold text-primary d-flex align-items-center justify-content-between m-0 mb-2">
+                        <span>📸 Product Images (Front, Back, Sides)</span>
+                        <span className="badge bg-primary">{images.length} Added</span>
+                      </label>
+                      
+                      <div className="input-group input-group-sm mb-2">
+                        <input 
+                          type="text" 
+                          className="form-control" 
+                          placeholder="Paste image URL (https://...)" 
+                          value={newImageUrlInput} 
+                          onChange={(e) => setNewImageUrlInput(e.target.value)} 
+                        />
+                        <button type="button" className="btn btn-primary fw-bold" onClick={handleAddImageUrl}>+ Add URL</button>
+                      </div>
+
+                      <div className="text-center my-1 text-muted small fw-bold">-- OR UPLOAD FROM DEVICE --</div>
+                      
+                      <input 
+                        type="file" 
+                        className="form-control form-control-sm mb-2" 
+                        accept="image/*" 
+                        multiple 
+                        onChange={handleMultipleImageUpload} 
+                      />
+
+                      {images.length > 0 && (
+                        <div className="d-flex flex-wrap gap-2 mt-2 pt-2 border-top">
+                          {images.map((imgUrl, idx) => (
+                            <div key={idx} className="position-relative border rounded p-1 bg-white shadow-sm" style={{ width: '60px', height: '60px' }}>
+                              <img 
+                                src={getCleanImageUrl(imgUrl)} 
+                                alt={`Angle ${idx + 1}`} 
+                                style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '4px' }} 
+                              />
+                              {idx === 0 && (
+                                <span className="position-absolute bottom-0 start-0 badge bg-dark text-warning" style={{ fontSize: '8px', transform: 'scale(0.8)' }}>
+                                  Cover
+                                </span>
+                              )}
                               <button 
-                                className="btn btn-sm btn-outline-primary fw-bold me-2"
-                                onClick={() => {
-                                  setEditingAdminUser(adm);
-                                  setAdminFormData({ name: adm.name, email: adm.email, password: '', role: adm.role || 'Admin', mobile: adm.mobile || '' });
-                                  setShowAddAdminModal(true);
-                                }}
+                                type="button" 
+                                className="position-absolute top-0 end-0 btn btn-danger btn-sm p-0 rounded-circle d-flex align-items-center justify-content-center"
+                                style={{ width: '18px', height: '18px', fontSize: '10px', transform: 'translate(30%, -30%)' }}
+                                onClick={() => handleRemoveImage(idx)}
+                                title="Remove photo"
                               >
-                                Edit
+                                ✕
                               </button>
-                              <button 
-                                className="btn btn-sm btn-outline-danger fw-bold"
-                                onClick={() => handleDeleteAdminUser(admId)}
-                              >
-                                Delete
-                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* 🟢 100% DYNAMIC ATTRIBUTES & CUSTOM VARIANT PRICING */}
+                    <div className="mb-3 p-3 bg-light rounded border border-primary border-opacity-25">
+                      <div className="d-flex justify-content-between align-items-center mb-2">
+                        <label className="form-label fw-bold text-primary m-0">
+                          ⚙️ Define Parameters / Variables for this Product:
+                        </label>
+                      </div>
+
+                      {/* Add new attribute name dynamically (e.g. Capacity, Speed, Weight, RAM, Size) */}
+                      <div className="input-group input-group-sm mb-2">
+                        <input 
+                          type="text" 
+                          className="form-control" 
+                          placeholder="Type Parameter Name (e.g. Capacity, Speed, Weight, Size)"
+                          value={newAttributeNameInput} 
+                          onChange={(e) => setNewAttributeNameInput(e.target.value)} 
+                        />
+                        <button type="button" className="btn btn-primary fw-bold" onClick={handleAddAttributeName}>
+                          + Add Variable
+                        </button>
+                      </div>
+
+                      <div className="d-flex flex-wrap gap-1 mb-3">
+                        {dynamicAttributeNames.map((attr, idx) => (
+                          <span key={idx} className="badge bg-secondary p-2 d-inline-flex align-items-center gap-1">
+                            <span>{attr}</span>
+                            <span style={{ cursor: 'pointer' }} onClick={() => handleRemoveAttributeName(attr)}>✕</span>
+                          </span>
+                        ))}
+                      </div>
+
+                      {/* Input values for each dynamic attribute */}
+                      <div className="p-2 border rounded bg-white mb-2">
+                        <span className="small fw-bold text-dark d-block mb-1">Enter Values & Custom Price for Option:</span>
+                        <div className="row g-2 mb-2">
+                          {dynamicAttributeNames.map((attr, idx) => (
+                            <div key={idx} className="col-6">
+                              <label className="small text-muted fw-bold">{attr}:</label>
+                              <input 
+                                type="text" 
+                                className="form-control form-control-sm fw-bold" 
+                                placeholder={`e.g. ${attr === 'Size' ? 'XL' : attr === 'Capacity' ? '1 TB' : 'Val'}`}
+                                value={variantInputs[attr] || ''} 
+                                onChange={(e) => setVariantInputs({ ...variantInputs, [attr]: e.target.value })} 
+                              />
+                            </div>
+                          ))}
+                          <div className="col-6">
+                            <label className="small text-muted fw-bold">Price (₹):</label>
+                            <input 
+                              type="number" 
+                              className="form-control form-control-sm fw-bold text-success" 
+                              placeholder="Price ₹"
+                              value={variantPrice} 
+                              onChange={(e) => setVariantPrice(e.target.value)} 
+                            />
+                          </div>
+                          <div className="col-6">
+                            <label className="small text-muted fw-bold">Stock:</label>
+                            <input 
+                              type="number" 
+                              className="form-control form-control-sm" 
+                              placeholder="Stock"
+                              value={variantStock} 
+                              onChange={(e) => setVariantStock(e.target.value)} 
+                            />
+                          </div>
+                        </div>
+                        <button 
+                          type="button" 
+                          className="btn btn-sm btn-outline-primary fw-bold w-100 py-1"
+                          onClick={handleAddDynamicVariant}
+                        >
+                          + Add This Combination
+                        </button>
+                      </div>
+
+                      {/* Table of configured dynamic variants */}
+                      {variants.length > 0 && (
+                        <div className="table-responsive border rounded bg-white">
+                          <table className="table table-sm table-bordered m-0 align-middle">
+                            <thead className="table-secondary text-nowrap">
+                              <tr>
+                                <th>Configured Attributes</th>
+                                <th>Price (₹)</th>
+                                <th>Stock</th>
+                                <th className="text-center">Action</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {variants.map((v, idx) => {
+                                const attrDisplay = Object.entries(v.attributes || {})
+                                  .map(([k, val]) => `${k}: ${val}`)
+                                  .join(' | ') || (v.size ? `Size: ${v.size}` : 'Standard');
+
+                                return (
+                                  <tr key={idx}>
+                                    <td className="small fw-bold">{attrDisplay}</td>
+                                    <td className="text-success fw-bold">₹{v.price}</td>
+                                    <td>{v.stock}</td>
+                                    <td className="text-center">
+                                      <button 
+                                        type="button" 
+                                        className="btn btn-sm btn-danger py-0 px-2"
+                                        style={{ fontSize: '11px' }}
+                                        onClick={() => handleRemoveVariant(idx)}
+                                      >
+                                        ✕
+                                      </button>
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="mb-3">
+                      <label className="form-label fw-semibold">Description</label>
+                      <textarea className="form-control" rows="2" required value={description} onChange={(e) => setDescription(e.target.value)}></textarea>
+                    </div>
+                    
+                    <div className="d-flex gap-2">
+                      <button type="submit" className="btn btn-primary w-100 fw-bold">{editingId ? 'Save Product' : 'Create Product'}</button>
+                      {editingId && <button type="button" className="btn btn-secondary" onClick={resetProductForm}>Cancel</button>}
+                    </div>
+                  </form>
+                </div>
+              </div>
+
+              {/* PRODUCTS LIST TABLE */}
+              <div className="col-lg-7">
+                <div className="card border-0 shadow-sm p-3 bg-white">
+                  <div className="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+                    <h5 className="fw-bold m-0">Live Inventory Management ({products.length})</h5>
+                    
+                    {userRole === 'SuperAdmin' && (
+                      <div className="d-flex gap-2">
+                        {selectedProductIds.length > 0 && (
+                          <button 
+                            className="btn btn-warning btn-sm fw-bold shadow-sm"
+                            onClick={() => handleBulkDeleteProducts(false)}
+                          >
+                            🗑️ Delete Selected ({selectedProductIds.length})
+                          </button>
+                        )}
+                        {products.length > 0 && (
+                          <button 
+                            className="btn btn-danger btn-sm fw-bold shadow-sm"
+                            onClick={() => handleBulkDeleteProducts(true)}
+                          >
+                            🔥 Clear ALL Products
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="table-responsive">
+                    <table className="table table-hover align-middle border m-0">
+                      <thead className="table-dark">
+                        <tr>
+                          {userRole === 'SuperAdmin' && (
+                            <th style={{ width: '40px', minWidth: '40px', whiteSpace: 'nowrap' }}>
+                              <input 
+                                type="checkbox" 
+                                className="form-check-input" 
+                                checked={products.length > 0 && selectedProductIds.length === products.length} 
+                                onChange={handleSelectAllProducts} 
+                              />
+                            </th>
+                          )}
+                          <th style={{ minWidth: '170px', whiteSpace: 'nowrap' }}>⭐ Set Rank</th>
+                          <th style={{ minWidth: '180px', whiteSpace: 'nowrap' }}>Product Item</th>
+                          <th style={{ minWidth: '120px', whiteSpace: 'nowrap' }}>Category</th>
+                          <th style={{ minWidth: '90px', whiteSpace: 'nowrap' }}>Base Price</th>
+                          <th style={{ minWidth: '130px', whiteSpace: 'nowrap' }}>Stock</th>
+                          <th style={{ minWidth: '120px', whiteSpace: 'nowrap' }}>Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {products.length === 0 ? (
+                          <tr>
+                            <td colSpan={userRole === 'SuperAdmin' ? 7 : 6} className="text-center py-4 text-muted">
+                              No products found in database.
                             </td>
                           </tr>
-                        );
-                      })
-                    )}
-                  </tbody>
-                </table>
+                        ) : (
+                          products.map((p) => {
+                            const targetId = p._id || p.id;
+                            const rawVal = p.countInStock !== undefined ? p.countInStock : (p.stock !== undefined ? p.stock : 0);
+                            const currentStock = Number(rawVal) || 0;
+                            const isSelected = selectedProductIds.includes(targetId);
+                            const defaultRank = p.priority !== undefined ? p.priority : 100;
+                            const currentInputRank = rankInputs[targetId] !== undefined ? rankInputs[targetId] : defaultRank;
+                            const totalImgs = Array.isArray(p.images) && p.images.length > 0 ? p.images.length : (p.image ? 1 : 0);
+                            const totalVariants = Array.isArray(p.variants) ? p.variants.length : 0;
+
+                            return (
+                            <tr key={targetId} className={isSelected ? 'table-warning' : ''}>
+                              {userRole === 'SuperAdmin' && (
+                                <td style={{ whiteSpace: 'nowrap' }}>
+                                  <input 
+                                    type="checkbox" 
+                                    className="form-check-input" 
+                                    checked={isSelected} 
+                                    onChange={() => handleToggleSelectProduct(targetId)} 
+                                  />
+                                </td>
+                              )}
+                              
+                              <td style={{ whiteSpace: 'nowrap' }}>
+                                <div className="d-flex align-items-center gap-1">
+                                  <input 
+                                    type="number" 
+                                    className="form-control form-control-sm fw-bold border-success text-center" 
+                                    style={{ width: '65px' }} 
+                                    min="1"
+                                    value={currentInputRank} 
+                                    onChange={(e) => setRankInputs({ ...rankInputs, [targetId]: e.target.value })}
+                                  />
+                                  <button 
+                                    type="button"
+                                    className="btn btn-sm btn-success fw-bold px-2 py-1 shadow-sm d-flex align-items-center gap-1"
+                                    style={{ fontSize: '11px', whiteSpace: 'nowrap' }}
+                                    onClick={() => handleSaveSingleProductRank(p, currentInputRank)}
+                                  >
+                                    <span>💾 Save</span>
+                                  </button>
+                                </div>
+                              </td>
+
+                              <td className="fw-bold small" style={{ whiteSpace: 'nowrap' }}>
+                                <div className="d-flex align-items-center gap-2">
+                                  <img 
+                                    src={getCleanImageUrl(p.image) || 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=100'} 
+                                    alt={p.name} 
+                                    width="36" 
+                                    height="36" 
+                                    className="rounded border" 
+                                    style={{ objectFit: 'cover' }} 
+                                  />
+                                  <div>
+                                    <span>{p.name}</span>
+                                    <div className="d-flex gap-1 mt-1">
+                                      <span className="badge bg-secondary" style={{ fontSize: '9px' }}>
+                                        📸 {totalImgs} Photos
+                                      </span>
+                                      {totalVariants > 0 && (
+                                        <span className="badge bg-primary" style={{ fontSize: '9px' }}>
+                                          ⚙️ {totalVariants} Options
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              </td>
+                              <td style={{ whiteSpace: 'nowrap' }}><span className="badge bg-secondary">{p.category}</span></td>
+                              <td className="text-success fw-bold" style={{ whiteSpace: 'nowrap' }}>₹{p.price}</td>
+                              <td style={{ whiteSpace: 'nowrap' }}>
+                                {currentStock <= 0 ? (
+                                  <span className="badge bg-danger">Out of Stock (0)</span>
+                                ) : currentStock < 5 ? (
+                                  <span className="badge bg-warning text-dark">Low ({currentStock})</span>
+                                ) : (
+                                  <span className="badge bg-success">In Stock ({currentStock})</span>
+                                )}
+                              </td>
+                              <td style={{ whiteSpace: 'nowrap' }}>
+                                <div className="btn-group btn-group-sm">
+                                  <button className="btn btn-outline-primary" onClick={() => handleEditProduct(p)}>Edit</button>
+                                  {userRole === 'SuperAdmin' && (
+                                    <button className="btn btn-outline-danger" onClick={() => handleDeleteProduct(targetId)}>Delete</button>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          )})
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -1443,7 +1773,6 @@ function App() {
                           placeholder="1 (First Slide)" 
                           value={bannerPriority} 
                           onChange={(e) => setBannerPriority(e.target.value)} 
-                          title="1 means this banner will slide first to customer"
                         />
                       </div>
                     </div>
@@ -1520,432 +1849,6 @@ function App() {
           </div>
         )}
 
-        {/* 🟢 PRODUCTS & STOCK TAB (WITH MULTIPLE GALLERY IMAGES & CUSTOM PRICED VARIANTS) */}
-        {activeTab === 'products' && hasTabAccess(userRole, 'products') && (
-          <div>
-            <h3 className="fw-bold mb-4">Product Information & Multi-Variant Pricing (PIM)</h3>
-
-            <div className="card border-0 shadow-sm p-4 bg-white mb-4">
-              <h5 className="fw-bold mb-3 text-success">
-                <i className="bi bi-file-earmark-spreadsheet me-2"></i>Bulk Product Upload (CSV)
-              </h5>
-              <form onSubmit={handleCsvUpload} className="d-flex gap-3 align-items-center">
-                <input 
-                  type="file" 
-                  className="form-control" 
-                  accept=".csv" 
-                  onChange={(e) => setCsvFile(e.target.files[0])} 
-                />
-                <button type="submit" className="btn btn-success fw-bold text-nowrap">
-                  <i className="bi bi-upload me-1"></i> Upload CSV
-                </button>
-              </form>
-              <small className="text-muted mt-2 d-block">
-                CSV Headers: <code>name, price, category, description, image, images (pipe | separated), stock, priority</code>
-              </small>
-            </div>
-
-            <div className="row g-4">
-              <div className="col-lg-5">
-                <div className="card border-0 shadow-sm p-4 bg-white">
-                  <h5 className="fw-bold mb-3">{editingId ? '✏️ Edit Product' : '➕ Add New Product'}</h5>
-                  <form onSubmit={handleProductSubmit}>
-                    <div className="mb-2">
-                      <label className="form-label fw-semibold">Title</label>
-                      <input type="text" className="form-control" required value={name} onChange={(e) => setName(e.target.value)} />
-                    </div>
-                    
-                    <div className="row mb-2">
-                      <div className="col-6">
-                        <label className="form-label fw-semibold">Base Price (₹)</label>
-                        <input type="number" className="form-control" required value={price} onChange={(e) => setPrice(e.target.value)} />
-                      </div>
-                      <div className="col-6">
-                        <label className="form-label fw-semibold">Category</label>
-                        <select className="form-select" value={category} onChange={handleCategoryChange}>
-                          {categories.map((cat, idx) => (
-                            <option key={idx} value={cat}>{cat}</option>
-                          ))}
-                          <option value="ADD_NEW">➕ Add New Category...</option>
-                        </select>
-                      </div>
-                    </div>
-
-                    {showCustomCategory && (
-                      <div className="mb-2 p-2 bg-light rounded border">
-                        <label className="form-label fw-bold text-primary small mb-1">Enter New Category Name:</label>
-                        <div className="input-group">
-                          <input 
-                            type="text" 
-                            className="form-control form-control-sm" 
-                            placeholder="e.g. Toys, Books, Grocery" 
-                            value={newCategoryInput} 
-                            onChange={(e) => setNewCategoryInput(e.target.value)} 
-                          />
-                          <button type="button" className="btn btn-primary btn-sm fw-bold" onClick={handleAddNewCategory}>Add</button>
-                          <button type="button" className="btn btn-outline-secondary btn-sm" onClick={() => setShowCustomCategory(false)}>X</button>
-                        </div>
-                      </div>
-                    )}
-
-                    <div className="row mb-2">
-                      <div className="col-6">
-                        <label className="form-label fw-semibold">Total Base Stock</label>
-                        <input 
-                          type="number" 
-                          className="form-control" 
-                          required 
-                          value={stock} 
-                          onChange={(e) => setStock(e.target.value)} 
-                        />
-                      </div>
-                      
-                      <div className="col-6">
-                        <label className="form-label fw-bold text-success">⭐ Display Rank</label>
-                        <input 
-                          type="number" 
-                          className="form-control fw-bold border-success" 
-                          min="1" 
-                          placeholder="1 (Top Position)" 
-                          value={productPriority} 
-                          onChange={(e) => setProductPriority(e.target.value)} 
-                          title="Rank 1 appears on Page 1 Top"
-                        />
-                      </div>
-                    </div>
-
-                    {/* 📸 MULTIPLE GALLERY IMAGES SECTION */}
-                    <div className="mb-3 p-3 bg-light rounded border">
-                      <label className="form-label fw-bold text-primary d-flex align-items-center justify-content-between m-0 mb-2">
-                        <span>📸 Product Images (Front, Back, Sides)</span>
-                        <span className="badge bg-primary">{images.length} Added</span>
-                      </label>
-                      
-                      <div className="input-group input-group-sm mb-2">
-                        <input 
-                          type="text" 
-                          className="form-control" 
-                          placeholder="Paste image URL (https://...)" 
-                          value={newImageUrlInput} 
-                          onChange={(e) => setNewImageUrlInput(e.target.value)} 
-                        />
-                        <button type="button" className="btn btn-primary fw-bold" onClick={handleAddImageUrl}>+ Add URL</button>
-                      </div>
-
-                      <div className="text-center my-1 text-muted small fw-bold">-- OR UPLOAD FROM DEVICE --</div>
-                      
-                      <input 
-                        type="file" 
-                        className="form-control form-control-sm mb-2" 
-                        accept="image/*" 
-                        multiple 
-                        onChange={handleMultipleImageUpload} 
-                      />
-
-                      {images.length > 0 && (
-                        <div className="d-flex flex-wrap gap-2 mt-2 pt-2 border-top">
-                          {images.map((imgUrl, idx) => (
-                            <div key={idx} className="position-relative border rounded p-1 bg-white shadow-sm" style={{ width: '65px', height: '65px' }}>
-                              <img 
-                                src={getCleanImageUrl(imgUrl)} 
-                                alt={`Angle ${idx + 1}`} 
-                                style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '4px' }} 
-                              />
-                              {idx === 0 && (
-                                <span className="position-absolute bottom-0 start-0 badge bg-dark text-warning" style={{ fontSize: '8px', transform: 'scale(0.8)' }}>
-                                  Cover
-                                </span>
-                              )}
-                              <button 
-                                type="button" 
-                                className="position-absolute top-0 end-0 btn btn-danger btn-sm p-0 rounded-circle d-flex align-items-center justify-content-center"
-                                style={{ width: '18px', height: '18px', fontSize: '10px', transform: 'translate(30%, -30%)' }}
-                                onClick={() => handleRemoveImage(idx)}
-                                title="Remove photo"
-                              >
-                                ✕
-                              </button>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* 🟢 📏 PRODUCT VARIANTS & CUSTOM PRICING BUILDER */}
-                    <div className="mb-3 p-3 bg-light rounded border border-primary border-opacity-25">
-                      <div className="d-flex justify-content-between align-items-center mb-2">
-                        <label className="form-label fw-bold text-primary m-0">
-                          📏 Product Options & Different Prices (Size/Color)
-                        </label>
-                        <span className="badge bg-primary">{variants.length} Options Added</span>
-                      </div>
-
-                      <div className="row g-2 mb-2">
-                        <div className="col-3">
-                          <input 
-                            type="text" 
-                            className="form-control form-control-sm" 
-                            placeholder="Color (e.g. Blue)" 
-                            value={variantColor} 
-                            onChange={(e) => setVariantColor(e.target.value)} 
-                          />
-                        </div>
-                        <div className="col-3">
-                          <select 
-                            className="form-select form-select-sm fw-bold" 
-                            value={variantSize} 
-                            onChange={(e) => setVariantSize(e.target.value)}
-                          >
-                            <option value="S">S (Small)</option>
-                            <option value="M">M (Medium)</option>
-                            <option value="L">L (Large)</option>
-                            <option value="XL">XL (Extra Large)</option>
-                            <option value="XXL">XXL (Double XL)</option>
-                            <option value="3XL">3XL</option>
-                            <option value="FreeSize">Free Size</option>
-                          </select>
-                        </div>
-                        <div className="col-3">
-                          <input 
-                            type="number" 
-                            className="form-control form-control-sm fw-bold text-success" 
-                            placeholder="Price ₹" 
-                            value={variantPrice} 
-                            onChange={(e) => setVariantPrice(e.target.value)} 
-                          />
-                        </div>
-                        <div className="col-3">
-                          <input 
-                            type="number" 
-                            className="form-control form-control-sm" 
-                            placeholder="Stock" 
-                            value={variantStock} 
-                            onChange={(e) => setVariantStock(e.target.value)} 
-                          />
-                        </div>
-                      </div>
-
-                      <button 
-                        type="button" 
-                        className="btn btn-sm btn-outline-primary fw-bold w-100 py-1 shadow-sm"
-                        onClick={handleAddVariantOption}
-                      >
-                        + Add Size / Price Option
-                      </button>
-
-                      {variants.length > 0 && (
-                        <div className="table-responsive mt-3 border rounded bg-white">
-                          <table className="table table-sm table-bordered m-0 align-middle">
-                            <thead className="table-secondary text-nowrap">
-                              <tr>
-                                <th>Color</th>
-                                <th>Size</th>
-                                <th>Price (₹)</th>
-                                <th>Stock</th>
-                                <th className="text-center">Action</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {variants.map((v, idx) => (
-                                <tr key={idx}>
-                                  <td className="small">{v.color || 'Standard'}</td>
-                                  <td><span className="badge bg-dark">{v.size}</span></td>
-                                  <td className="text-success fw-bold">₹{v.price}</td>
-                                  <td>{v.stock}</td>
-                                  <td className="text-center">
-                                    <button 
-                                      type="button" 
-                                      className="btn btn-sm btn-danger py-0 px-2"
-                                      style={{ fontSize: '11px' }}
-                                      onClick={() => handleRemoveVariantOption(idx)}
-                                      title="Remove option"
-                                    >
-                                      ✕
-                                    </button>
-                                  </td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      )}
-                      <small className="text-muted d-block mt-2" style={{ fontSize: '11px' }}>
-                        * Customer website will dynamically show different prices when customer taps on S, M, L, XL or XXL!
-                      </small>
-                    </div>
-
-                    <div className="mb-3">
-                      <label className="form-label fw-semibold">Description</label>
-                      <textarea className="form-control" rows="2" required value={description} onChange={(e) => setDescription(e.target.value)}></textarea>
-                    </div>
-                    
-                    <div className="d-flex gap-2">
-                      <button type="submit" className="btn btn-primary w-100 fw-bold">{editingId ? 'Save Product' : 'Create Product'}</button>
-                      {editingId && <button type="button" className="btn btn-secondary" onClick={resetProductForm}>Cancel</button>}
-                    </div>
-                  </form>
-                </div>
-              </div>
-
-              <div className="col-lg-7">
-                <div className="card border-0 shadow-sm p-3 bg-white">
-                  <div className="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
-                    <h5 className="fw-bold m-0">Live Inventory Management ({products.length})</h5>
-                    
-                    {userRole === 'SuperAdmin' && (
-                      <div className="d-flex gap-2">
-                        {selectedProductIds.length > 0 && (
-                          <button 
-                            className="btn btn-warning btn-sm fw-bold shadow-sm"
-                            onClick={() => handleBulkDeleteProducts(false)}
-                          >
-                            🗑️ Delete Selected ({selectedProductIds.length})
-                          </button>
-                        )}
-                        {products.length > 0 && (
-                          <button 
-                            className="btn btn-danger btn-sm fw-bold shadow-sm"
-                            onClick={() => handleBulkDeleteProducts(true)}
-                          >
-                            🔥 Clear ALL Store Products
-                          </button>
-                        )}
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="table-responsive">
-                    <table className="table table-hover align-middle border m-0">
-                      <thead className="table-dark">
-                        <tr>
-                          {userRole === 'SuperAdmin' && (
-                            <th style={{ width: '40px', minWidth: '40px', whiteSpace: 'nowrap' }}>
-                              <input 
-                                type="checkbox" 
-                                className="form-check-input" 
-                                checked={products.length > 0 && selectedProductIds.length === products.length} 
-                                onChange={handleSelectAllProducts} 
-                              />
-                            </th>
-                          )}
-                          <th style={{ minWidth: '170px', whiteSpace: 'nowrap' }}>⭐ Set Rank</th>
-                          <th style={{ minWidth: '180px', whiteSpace: 'nowrap' }}>Product Item</th>
-                          <th style={{ minWidth: '120px', whiteSpace: 'nowrap' }}>Category</th>
-                          <th style={{ minWidth: '90px', whiteSpace: 'nowrap' }}>Base Price</th>
-                          <th style={{ minWidth: '130px', whiteSpace: 'nowrap' }}>Stock</th>
-                          <th style={{ minWidth: '120px', whiteSpace: 'nowrap' }}>Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {products.length === 0 ? (
-                          <tr>
-                            <td colSpan={userRole === 'SuperAdmin' ? 7 : 6} className="text-center py-4 text-muted">
-                              No products found in database. Add new items or bulk upload CSV.
-                            </td>
-                          </tr>
-                        ) : (
-                          products.map((p) => {
-                            const targetId = p._id || p.id;
-                            const rawVal = p.countInStock !== undefined ? p.countInStock : (p.stock !== undefined ? p.stock : 0);
-                            const currentStock = Number(rawVal) || 0;
-                            const isSelected = selectedProductIds.includes(targetId);
-                            const defaultRank = p.priority !== undefined ? p.priority : 100;
-                            const currentInputRank = rankInputs[targetId] !== undefined ? rankInputs[targetId] : defaultRank;
-                            const totalImgs = Array.isArray(p.images) && p.images.length > 0 ? p.images.length : (p.image ? 1 : 0);
-                            const totalVariants = Array.isArray(p.variants) ? p.variants.length : 0;
-
-                            return (
-                            <tr key={targetId} className={isSelected ? 'table-warning' : ''}>
-                              {userRole === 'SuperAdmin' && (
-                                <td style={{ whiteSpace: 'nowrap' }}>
-                                  <input 
-                                    type="checkbox" 
-                                    className="form-check-input" 
-                                    checked={isSelected} 
-                                    onChange={() => handleToggleSelectProduct(targetId)} 
-                                  />
-                                </td>
-                              )}
-                              
-                              <td style={{ whiteSpace: 'nowrap' }}>
-                                <div className="d-flex align-items-center gap-1">
-                                  <input 
-                                    type="number" 
-                                    className="form-control form-control-sm fw-bold border-success text-center" 
-                                    style={{ width: '65px' }} 
-                                    min="1"
-                                    value={currentInputRank} 
-                                    onChange={(e) => setRankInputs({ ...rankInputs, [targetId]: e.target.value })}
-                                    title="Set rank number (1 is top priority)"
-                                  />
-                                  <button 
-                                    type="button"
-                                    className="btn btn-sm btn-success fw-bold px-2 py-1 shadow-sm d-flex align-items-center gap-1"
-                                    style={{ fontSize: '11px', whiteSpace: 'nowrap' }}
-                                    onClick={() => handleSaveSingleProductRank(p, currentInputRank)}
-                                    title="Save this product rank to database"
-                                  >
-                                    <span>💾 Save Rank</span>
-                                  </button>
-                                </div>
-                              </td>
-
-                              <td className="fw-bold small" style={{ whiteSpace: 'nowrap' }}>
-                                <div className="d-flex align-items-center gap-2">
-                                  <img 
-                                    src={getCleanImageUrl(p.image) || 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=100'} 
-                                    alt={p.name} 
-                                    width="36" 
-                                    height="36" 
-                                    className="rounded border" 
-                                    style={{ objectFit: 'cover' }} 
-                                  />
-                                  <div>
-                                    <span>{p.name}</span>
-                                    <div className="d-flex gap-1 mt-1">
-                                      <span className="badge bg-secondary" style={{ fontSize: '9px' }}>
-                                        📸 {totalImgs} Photos
-                                      </span>
-                                      {totalVariants > 0 && (
-                                        <span className="badge bg-primary" style={{ fontSize: '9px' }}>
-                                          📏 {totalVariants} Sizes
-                                        </span>
-                                      )}
-                                    </div>
-                                  </div>
-                                </div>
-                              </td>
-                              <td style={{ whiteSpace: 'nowrap' }}><span className="badge bg-secondary">{p.category}</span></td>
-                              <td className="text-success fw-bold" style={{ whiteSpace: 'nowrap' }}>₹{p.price}</td>
-                              <td style={{ whiteSpace: 'nowrap' }}>
-                                {currentStock <= 0 ? (
-                                  <span className="badge bg-danger">Out of Stock (0)</span>
-                                ) : currentStock < 5 ? (
-                                  <span className="badge bg-warning text-dark">Low ({currentStock})</span>
-                                ) : (
-                                  <span className="badge bg-success">In Stock ({currentStock})</span>
-                                )}
-                              </td>
-                              <td style={{ whiteSpace: 'nowrap' }}>
-                                <div className="btn-group btn-group-sm">
-                                  <button className="btn btn-outline-primary" onClick={() => handleEditProduct(p)}>Edit</button>
-                                  {userRole === 'SuperAdmin' && (
-                                    <button className="btn btn-outline-danger" onClick={() => handleDeleteProduct(targetId)}>Delete</button>
-                                  )}
-                                </div>
-                              </td>
-                            </tr>
-                          )})
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
         {/* ORDERS & SHIPPING TAB */}
         {activeTab === 'orders' && hasTabAccess(userRole, 'orders') && (
           <div>
@@ -2008,12 +1911,6 @@ function App() {
                         <td colSpan="6" className="text-center py-5 text-muted">
                           <i className="bi bi-search fs-2 d-block mb-2 text-secondary"></i>
                           <h5>No orders found matching your selected filter.</h5>
-                          <button 
-                            className="btn btn-link btn-sm fw-bold text-primary" 
-                            onClick={() => { setOrderSearchTerm(''); setOrderStatusFilter('ALL'); }}
-                          >
-                            Clear All Filters
-                          </button>
                         </td>
                       </tr>
                     ) : (
@@ -2238,8 +2135,8 @@ function App() {
                         onChange={(e) => setNewCouponCategory(e.target.value)}
                       >
                         <option value="All">🌟 All Categories (Global Discount)</option>
-                        {categories.map((cat, idx) => (
-                          <option key={idx} value={cat}>📦 {cat} Only</option>
+                        {rawCategoriesList.map((cat, idx) => (
+                          <option key={idx} value={cat.name}>📦 {cat.name} Only</option>
                         ))}
                       </select>
                     </div>
@@ -2314,6 +2211,184 @@ function App() {
                     </table>
                   </div>
                 </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* CUSTOMERS TAB */}
+        {activeTab === 'customers' && (
+          <div>
+            <div className="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+              <h3 className="fw-bold m-0">👥 Customer Intelligence & Abandoned Recovery</h3>
+              
+              <div className="d-flex align-items-center gap-2">
+                <select 
+                  className="form-select form-select-sm fw-bold border-warning text-dark"
+                  value={customerFilter}
+                  onChange={(e) => setCustomerFilter(e.target.value)}
+                  style={{ width: '250px' }}
+                >
+                  <option value="ALL">🌟 All Store Customers ({customersList.length})</option>
+                  <option value="CART">🛒 Abandoned Cart Customers Only</option>
+                  <option value="WISHLIST">❤️ Wishlist Left Customers Only</option>
+                </select>
+
+                <button className="btn btn-outline-primary btn-sm fw-bold" onClick={fetchData}>
+                  <i className="bi bi-arrow-clockwise me-1"></i> Sync Customers
+                </button>
+              </div>
+            </div>
+
+            <div className="card border-0 shadow-sm p-3 bg-white">
+              <div className="table-responsive">
+                <table className="table table-bordered table-hover align-middle m-0">
+                  <thead className="table-dark text-nowrap">
+                    <tr>
+                      <th style={{ minWidth: '180px' }}>Customer Name</th>
+                      <th style={{ minWidth: '220px' }}>Email & Mobile</th>
+                      <th style={{ minWidth: '200px' }}>🛒 Cart Left Items</th>
+                      <th style={{ minWidth: '200px' }}>❤️ Wishlist Saved Items</th>
+                      <th style={{ minWidth: '180px' }}>Action & Recovery</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredCustomers.length === 0 ? (
+                      <tr>
+                        <td colSpan="5" className="text-center py-5 text-muted">
+                          <i className="bi bi-people fs-2 d-block mb-2 text-secondary"></i>
+                          <h5>No customers found matching this filter.</h5>
+                        </td>
+                      </tr>
+                    ) : (
+                      filteredCustomers.map((cust) => (
+                        <tr key={cust._id || cust.email}>
+                          <td className="fw-bold text-dark">{cust.name}</td>
+                          <td>
+                            <span className="fw-semibold text-primary d-block">{cust.email}</span>
+                            <small className="text-muted">{cust.mobile || 'No Mobile Registered'}</small>
+                          </td>
+                          <td>
+                            {cust.cart && cust.cart.length > 0 ? (
+                              <div>
+                                <span className="badge bg-warning text-dark mb-1">{cust.cart.length} Products in Cart</span>
+                                <div className="small text-truncate" style={{ maxWidth: '200px' }}>
+                                  {cust.cart.map(i => i.name).join(', ')}
+                                </div>
+                              </div>
+                            ) : <span className="text-muted small">Empty Cart</span>}
+                          </td>
+                          <td>
+                            {cust.wishlist && cust.wishlist.length > 0 ? (
+                              <div>
+                                <span className="badge bg-danger mb-1">{cust.wishlist.length} Products Wishlisted</span>
+                                <div className="small text-truncate" style={{ maxWidth: '200px' }}>
+                                  {cust.wishlist.map(i => i.name).join(', ')}
+                                </div>
+                              </div>
+                            ) : <span className="text-muted small">No Wishlist</span>}
+                          </td>
+                          <td>
+                            <button 
+                              className="btn btn-sm btn-success fw-bold px-3 py-1 shadow-sm"
+                              onClick={() => {
+                                setSelectedTargetCustomer(cust);
+                                setPersonalCouponCode(`OFFER_${cust.name ? cust.name.split(' ')[0].toUpperCase() : 'USER'}_${Math.floor(100 + Math.random() * 900)}`);
+                                setShowPersonalDiscountModal(true);
+                              }}
+                            >
+                              🎁 Offer Extra Discount
+                            </button>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ADMIN USERS TAB */}
+        {activeTab === 'admin-users' && (
+          <div>
+            <div className="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+              <h3 className="fw-bold m-0">⚙️ Admin & Staff Users Management</h3>
+              <button 
+                className="btn btn-primary fw-bold btn-sm shadow-sm"
+                onClick={() => {
+                  setEditingAdminUser(null);
+                  setAdminFormData({ name: '', email: '', password: '', role: 'Admin', mobile: '' });
+                  setShowAddAdminModal(true);
+                }}
+              >
+                ➕ Create New Admin / Staff
+              </button>
+            </div>
+
+            <div className="card border-0 shadow-sm p-3 bg-white">
+              <div className="table-responsive">
+                <table className="table table-bordered table-hover align-middle m-0">
+                  <thead className="table-dark text-nowrap">
+                    <tr>
+                      <th>Name</th>
+                      <th>Email & Mobile</th>
+                      <th>Role / Permission</th>
+                      <th>Created Date</th>
+                      <th className="text-center">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {adminUsersList.length === 0 ? (
+                      <tr>
+                        <td colSpan="5" className="text-center py-5 text-muted">
+                          <i className="bi bi-shield-lock fs-2 d-block mb-2 text-secondary"></i>
+                          <h5>No admin or staff users found in database.</h5>
+                        </td>
+                      </tr>
+                    ) : (
+                      adminUsersList.map((adm) => {
+                        const admId = adm._id || adm.id;
+                        return (
+                          <tr key={admId}>
+                            <td className="fw-bold text-dark">{adm.name}</td>
+                            <td>
+                              <span className="fw-semibold text-primary d-block">{adm.email}</span>
+                              <small className="text-muted">{adm.mobile || 'No Mobile'}</small>
+                            </td>
+                            <td>
+                              <span className={`badge ${adm.role === 'SuperAdmin' ? 'bg-danger' : 'bg-info text-dark'} px-2 py-1`}>
+                                {adm.role || 'Admin'}
+                              </span>
+                            </td>
+                            <td className="small text-muted">
+                              {adm.createdAt ? new Date(adm.createdAt).toLocaleDateString('en-IN') : 'Recent'}
+                            </td>
+                            <td className="text-center" style={{ whiteSpace: 'nowrap' }}>
+                              <button 
+                                className="btn btn-sm btn-outline-primary fw-bold me-2"
+                                onClick={() => {
+                                  setEditingAdminUser(adm);
+                                  setAdminFormData({ name: adm.name, email: adm.email, password: '', role: adm.role || 'Admin', mobile: adm.mobile || '' });
+                                  setShowAddAdminModal(true);
+                                }}
+                              >
+                                Edit
+                              </button>
+                              <button 
+                                className="btn btn-sm btn-outline-danger fw-bold"
+                                onClick={() => handleDeleteAdminUser(admId)}
+                              >
+                                Delete
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
               </div>
             </div>
           </div>
