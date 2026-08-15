@@ -20,14 +20,37 @@ const productSchema = new mongoose.Schema({
         required: true,
         default: 'General'
     },
-    // 🟢 Primary Cover Image (मुख्य फ़्रंट इमेज)
+    // 🟢 Full Category Hierarchy Trail: ["Electronics", "Computers", "Storage", "Internal Hard Disks"]
+    categoryPath: {
+        type: [String],
+        default: []
+    },
     image: {
         type: String,
         default: ''
     },
-    // 📸 Multiple Product Gallery Images (आगे, पीछे, ऊपर, नीचे के सभी ऐंगल्स)
     images: {
         type: [String],
+        default: []
+    },
+    // 🟢 Dynamic Parameter Names defined by Admin: ["Capacity", "Speed"] or ["Size", "Color", "Weight"]
+    dynamicAttributeNames: {
+        type: [String],
+        default: []
+    },
+    // 🟢 Dynamic Variants with Custom Pricing & Stock
+    variants: {
+        type: [{
+            attributes: {
+                type: Map,
+                of: String,
+                default: {}
+            },
+            color: { type: String, default: '' },
+            size: { type: String, default: '' },
+            price: { type: Number, required: true },
+            stock: { type: Number, default: 0 }
+        }],
         default: []
     },
     stock: {
@@ -45,7 +68,6 @@ const productSchema = new mongoose.Schema({
         type: Number,
         default: 4.5
     },
-    // 🟢 Display Ranking (1 is top priority, 2 is second...)
     priority: {
         type: Number,
         default: 100,

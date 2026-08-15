@@ -7,7 +7,7 @@ const jwt = require('jsonwebtoken');
 require('dotenv').config();
 
 // ==========================================
-// 🗄️ SAFE MODEL RESOLVER WITH VARIANTS & MULTI-IMAGE SUPPORT
+// 🗄️ SAFE MODEL RESOLVER
 // ==========================================
 const resolveModel = (imported, fallbackName, schemaDef, collectionName) => {
   if (imported && typeof imported.find === 'function') return imported;
@@ -55,17 +55,28 @@ const Order = resolveModel(rawOrder, 'Order', {
   status: { type: String, default: 'Processing' }
 }, 'orders');
 
-// 4. Products Model (🟢 WITH PRIORITY, MULTI-IMAGE & VARIANTS SUPPORT)
+// 4. 🟢 INFINITE NESTED CATEGORY MODEL (Self-Referencing Tree)
+let rawCategory; try { rawCategory = require('./models/Category'); } catch (e) {}
+const Category = resolveModel(rawCategory, 'Category', {
+  name: { type: String, required: true, trim: true },
+  parent: { type: mongoose.Schema.Types.ObjectId, ref: 'Category', default: null },
+  slug: { type: String, default: '' }
+}, 'categories');
+
+// 5. 🟢 FULLY DYNAMIC PRODUCT MODEL
 let rawProd; try { rawProd = require('./models/Product'); } catch (e) {}
 const Product = resolveModel(rawProd, 'Product', {
-  name: { type: String, required: true },
+  name: { type: String, required: true, trim: true },
   price: { type: Number, required: true },
   category: { type: String, default: 'General' },
+  categoryPath: { type: [String], default: [] },
   description: { type: String, default: '' },
-  image: { type: String, default: '' }, // Cover main image
-  images: { type: [String], default: [] }, // 📸 Multi-angle gallery images
+  image: { type: String, default: '' },
+  images: { type: [String], default: [] },
+  dynamicAttributeNames: { type: [String], default: [] },
   variants: {
     type: [{
+      attributes: { type: Map, of: String, default: {} },
       color: { type: String, default: '' },
       size: { type: String, default: '' },
       price: { type: Number, required: true },
@@ -79,7 +90,7 @@ const Product = resolveModel(rawProd, 'Product', {
   priority: { type: Number, default: 100 }
 }, 'products');
 
-// 5. Tracking & Auxiliary Models
+// 6. Tracking & Auxiliary Models
 let rawCart; try { rawCart = require('./models/AbandonedCart'); } catch (e) {}
 const AbandonedCart = resolveModel(rawCart, 'AbandonedCart', {
   userEmail: { type: String, required: true, lowercase: true, trim: true },
@@ -96,7 +107,6 @@ const WishlistRecord = resolveModel(rawWish, 'WishlistRecord', {
   wishlistItems: { type: Array, default: [] }
 }, 'wishlistrecords');
 
-// 6. Banners Model (🟢 WITH PRIORITY)
 let rawBanner; try { rawBanner = require('./models/bannerModel'); } catch (e) {}
 const Banner = resolveModel(rawBanner, 'Banner', {
   title: String,
@@ -389,7 +399,78 @@ app.get(['/api/auth/customers', '/api/customers', '/api/admin/customers', '/api/
 });
 
 // =========================================================================
-// 🟢 2. ADMIN USERS MANAGEMENT ('adminusers' COLLECTION)
+// 🟢 2. INFINITE NESTED CATEGORIES ENGINE
+// =========================================================================
+
+const buildCategoryTree = (categories, parentId = null) => {
+  const branch = [];
+  const matches = parentId === null
+    ? categories.filter(c => !c.parent)
+    : categories.filter(c => c.parent && c.parent.toString() === parentId.toString());
+
+  for (let cat of matches) {
+    branch.push({
+      _id: cat._id,
+      name: cat.name,
+      parent: cat.parent,
+      children: buildCategoryTree(categories, cat._id)
+    });
+  }
+  return branch;
+};
+
+app.get('/api/categories', async (req, res) => {
+  try {
+    const allCategories = await Category.find({}).lean();
+    const tree = buildCategoryTree(allCategories);
+    return res.status(200).json({ categories: allCategories, tree });
+  } catch (err) {
+    return res.status(500).json({ message: 'Failed to fetch categories: ' + err.message });
+  }
+});
+
+app.post('/api/categories', async (req, res) => {
+  try {
+    const { name, parentId } = req.body;
+    if (!name || !name.trim()) return res.status(400).json({ message: 'Category name is required' });
+
+    const newCat = new Category({
+      name: name.trim(),
+      parent: parentId || null
+    });
+    await newCat.save();
+
+    const allCategories = await Category.find({}).lean();
+    const tree = buildCategoryTree(allCategories);
+    return res.status(201).json({ message: 'Category created successfully!', category: newCat, tree });
+  } catch (err) {
+    return res.status(500).json({ message: 'Category creation error: ' + err.message });
+  }
+});
+
+app.delete('/api/categories/:id', async (req, res) => {
+  try {
+    const targetId = req.params.id;
+    const deleteSubTree = async (pId) => {
+      const children = await Category.find({ parent: pId });
+      for (let child of children) {
+        await deleteSubTree(child._id);
+        await Category.findByIdAndDelete(child._id);
+      }
+    };
+    await deleteSubTree(targetId);
+    await Category.findByIdAndDelete(targetId);
+
+    const allCategories = await Category.find({}).lean();
+    const tree = buildCategoryTree(allCategories);
+    return res.status(200).json({ message: 'Category and all sub-branches deleted.', tree });
+  } catch (err) {
+    return res.status(500).json({ message: 'Failed to delete category: ' + err.message });
+  }
+});
+
+// =========================================================================
+// 🟢 3. ADMIN USERS MANAGEMENT ('adminusers' COLLECTION)
 // =========================================================================
 
 app.post(['/api/auth/admin-users', '/api/admin/auth/signup', '/api/admin/auth/register'], async (req, res) => {
@@ -449,12 +530,11 @@ app.delete('/api/auth/admin-users/:id', async (req, res) => {
 });
 
 // =========================================================================
-// 🟢 3. PRODUCTS MANAGEMENT (WITH MULTI-IMAGES, VARIANTS & PRIORITY SORT)
+// 🟢 4. PRODUCTS MANAGEMENT (NESTED CATEGORY PATHS & DYNAMIC ATTRIBUTES)
 // =========================================================================
 
 app.get('/api/products', async (req, res) => {
   try {
-    // 🟢 Priority 1 comes first, then Priority 2... fallback to latest created
     const products = await Product.find({}).sort({ priority: 1, createdAt: -1 });
     return res.status(200).json(products);
   } catch (err) {
@@ -464,9 +544,8 @@ app.get('/api/products', async (req, res) => {
 
 app.post('/api/products', async (req, res) => {
   try {
-    const { name, price, category, description, image, images, variants, countInStock, stock, rating, priority } = req.body;
+    const { name, price, category, categoryPath, description, image, images, dynamicAttributeNames, variants, countInStock, stock, rating, priority } = req.body;
     
-    // Multi-image array normalization
     let galleryImages = [];
     if (Array.isArray(images) && images.length > 0) {
       galleryImages = images.filter(Boolean);
@@ -476,12 +555,12 @@ app.post('/api/products', async (req, res) => {
 
     const coverImage = (galleryImages.length > 0) ? galleryImages[0] : (image || '');
 
-    // Variants validation & parsing
     let parsedVariants = [];
     if (Array.isArray(variants)) {
       parsedVariants = variants.map(v => ({
-        color: String(v.color || '').trim(),
-        size: String(v.size || '').trim().toUpperCase(),
+        attributes: v.attributes || {},
+        color: v.color || '',
+        size: v.size || '',
         price: Number(v.price) || Number(price) || 0,
         stock: Number(v.stock) || 0
       }));
@@ -491,9 +570,11 @@ app.post('/api/products', async (req, res) => {
       name,
       price: Number(price) || 0,
       category: category || 'General',
+      categoryPath: Array.isArray(categoryPath) && categoryPath.length > 0 ? categoryPath : [category || 'General'],
       description: description || '',
       image: coverImage,
       images: galleryImages,
+      dynamicAttributeNames: Array.isArray(dynamicAttributeNames) ? dynamicAttributeNames : [],
       variants: parsedVariants,
       countInStock: Number(stock) || Number(countInStock) || 10,
       stock: Number(stock) || Number(countInStock) || 10,
@@ -507,12 +588,10 @@ app.post('/api/products', async (req, res) => {
   }
 });
 
-// 🟢 BULLET-PROOF FULL PRODUCT, MULTI-IMAGE & VARIANTS UPDATE
 app.put('/api/products/:id', async (req, res) => {
   try {
     const updateData = { ...req.body };
 
-    // Explicitly parse numeric priority / rank
     if (updateData.priority !== undefined && updateData.priority !== null && updateData.priority !== '') {
       updateData.priority = Number(updateData.priority);
     }
@@ -525,7 +604,6 @@ app.put('/api/products/:id', async (req, res) => {
       updateData.countInStock = s;
     }
 
-    // Multi-images array handling
     if (updateData.images && Array.isArray(updateData.images)) {
       updateData.images = updateData.images.filter(Boolean);
       if (updateData.images.length > 0 && !updateData.image) {
@@ -535,11 +613,11 @@ app.put('/api/products/:id', async (req, res) => {
       updateData.images = [updateData.image];
     }
 
-    // Variants handling
     if (updateData.variants && Array.isArray(updateData.variants)) {
       updateData.variants = updateData.variants.map(v => ({
-        color: String(v.color || '').trim(),
-        size: String(v.size || '').trim().toUpperCase(),
+        attributes: v.attributes || {},
+        color: v.color || '',
+        size: v.size || '',
         price: Number(v.price) || Number(updateData.price) || 0,
         stock: Number(v.stock) || 0
       }));
@@ -562,31 +640,23 @@ app.put('/api/products/:id', async (req, res) => {
   }
 });
 
-// 🟢 SUPER-FAST DEDICATED PRIORITY UPDATE ENDPOINT
 app.put('/api/products/:id/priority', async (req, res) => {
   try {
     const priorityVal = Number(req.body.priority);
-    if (isNaN(priorityVal)) {
-      return res.status(400).json({ message: 'Invalid priority number' });
-    }
+    if (isNaN(priorityVal)) return res.status(400).json({ message: 'Invalid priority number' });
 
     const updated = await Product.findByIdAndUpdate(
       req.params.id,
       { $set: { priority: priorityVal } },
       { new: true }
     );
-
-    if (!updated) {
-      return res.status(404).json({ message: 'Product not found' });
-    }
-
+    if (!updated) return res.status(404).json({ message: 'Product not found' });
     return res.status(200).json(updated);
   } catch (err) {
     return res.status(500).json({ message: 'Failed to update priority: ' + err.message });
   }
 });
 
-// 🟢 Quick Batch Update Product Priorities API
 app.put('/api/products/priority/batch', async (req, res) => {
   try {
     const { priorities } = req.body;
@@ -643,9 +713,11 @@ app.post('/api/products/bulk-upload', upload.any(), async (req, res) => {
           name: item.name || item.title,
           price: Number(item.price) || 0,
           category: item.category || 'General',
+          categoryPath: item.categoryPath || [item.category || 'General'],
           description: item.description || '',
           image: primaryImg,
           images: galleryImgs.filter(Boolean),
+          dynamicAttributeNames: item.dynamicAttributeNames || [],
           variants: item.variants ? (typeof item.variants === 'string' ? JSON.parse(item.variants) : item.variants) : [],
           countInStock: Number(item.stock) || Number(item.countInStock) || 10,
           stock: Number(item.stock) || Number(item.countInStock) || 10,
@@ -683,7 +755,7 @@ app.post('/api/products/upload', upload.single('image'), (req, res) => {
 });
 
 // =========================================================================
-// 🟢 4. BANNERS (SORTED BY PRIORITY ASCENDING: 1, 2, 3...)
+// 🟢 5. BANNERS, ORDERS, REVIEWS & COUPONS
 // =========================================================================
 
 app.get('/api/banners', async (req, res) => {
@@ -737,10 +809,6 @@ app.delete('/api/banners/:id', async (req, res) => {
     return res.status(500).json({ message: 'Banner delete error' });
   }
 });
-
-// =========================================================================
-// 🟢 5. ORDERS, REVIEWS & COUPONS APIS
-// =========================================================================
 
 app.get('/api/orders', async (req, res) => {
   try {
@@ -867,7 +935,7 @@ app.delete('/api/coupons/:id', async (req, res) => {
 });
 
 app.get('/', (req, res) => {
-  res.send('🚀 TechStore Central Backend Active with Multi-Image Gallery, Variants & Dynamic Pricing!');
+  res.send('🚀 TechStore Universal Central Backend Active with Infinite Nested Categories & Dynamic Attributes!');
 });
 
 // =========================================================================
