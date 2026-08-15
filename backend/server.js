@@ -136,6 +136,16 @@ const storage = multer.memoryStorage();
 const upload = multer({ storage, limits: { fileSize: 10 * 1024 * 1024 } });
 
 // =========================================================================
+// 🟢 HELPER: READS EXACT STOCK FROM PRODUCT
+// =========================================================================
+const getProductStock = (p) => {
+  if (!p) return 0;
+  if (p.countInStock !== undefined && p.countInStock !== null) return Number(p.countInStock);
+  if (p.stock !== undefined && p.stock !== null) return Number(p.stock);
+  return 0;
+};
+
+// =========================================================================
 // 🟢 1. CUSTOMER AUTH & SYNC ROUTES
 // =========================================================================
 
@@ -986,7 +996,7 @@ app.post('/api/ai/chat', async (req, res) => {
     }
 
     let responseText = "";
-    matchedProducts.forEach((p, idx) => {
+    matchedProducts.forEach((p) => {
       responseText += `📦 **${p.name}**\n`;
       responseText += `💰 Price: ₹${p.price}\n`;
       responseText += `📂 Category: ${p.category || 'General'}\n`;
@@ -997,10 +1007,10 @@ app.post('/api/ai/chat', async (req, res) => {
 
       if (p.variants && p.variants.length > 0) {
         responseText += `✨ **Available Options & Variants:**\n`;
-        p.variants.forEach((v, vIdx) => {
+        p.variants.forEach((v) => {
           const rawAttrs = v.attributes instanceof Map ? Object.fromEntries(v.attributes) : (v.attributes || {});
           const attrStr = Object.entries(rawAttrs).map(([k, val]) => `${k}: ${val}`).join(', ');
-          const optionLabel = attrStr || (v.size ? `Size: ${v.size}` : '') || (v.color ? `Color: ${v.color}` : `Variant #${vIdx + 1}`);
+          const optionLabel = attrStr || (v.size ? `Size: ${v.size}` : '') || (v.color ? `Color: ${v.color}` : `Variant`);
           responseText += `  • [${optionLabel}] - ₹${v.price} (Stock: ${v.stock})\n`;
         });
       }
@@ -1009,6 +1019,7 @@ app.post('/api/ai/chat', async (req, res) => {
 
     return res.status(200).json({ reply: responseText.trim() });
   } catch (err) {
+    console.error("AI Chat Error:", err.message);
     return res.status(500).json({ reply: "Sorry, I encountered an error while processing your request. Please try again." });
   }
 });
