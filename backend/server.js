@@ -971,7 +971,7 @@ app.delete('/api/coupons/:id', async (req, res) => {
 });
 
 // =========================================================================
-// 🟢 6. STORE AI ASSISTANT ENDPOINT (SEARCH PRODUCTS, VARIANTS & STOCK)
+// 🟢 6. STORE AI ASSISTANT ENDPOINT (SMART GREETING & SEARCH)
 // =========================================================================
 app.post('/api/ai/chat', async (req, res) => {
   try {
@@ -981,6 +981,17 @@ app.post('/api/ai/chat', async (req, res) => {
     }
 
     const query = message.trim();
+    const lowerQuery = query.toLowerCase();
+
+    // 🟢 1. Check for Greetings (Hi, Hello, Hey, etc.)
+    const greetings = ['hi', 'hello', 'hey', 'greetings', 'good morning', 'good evening', 'good afternoon', 'sup', 'hola'];
+    if (greetings.includes(lowerQuery) || lowerQuery.startsWith('hi ') || lowerQuery.startsWith('hello ')) {
+      return res.status(200).json({ 
+        reply: "Hello! 👋 Welcome to TechStore. How can I help you today? You can ask me about any product, its variations, or stock availability!" 
+      });
+    }
+
+    // 🟢 2. Search Products if it's a product-related query
     const matchedProducts = await Product.find({
       $or: [
         { name: { $regex: query, $options: 'i' } },
@@ -991,7 +1002,7 @@ app.post('/api/ai/chat', async (req, res) => {
 
     if (matchedProducts.length === 0) {
       return res.status(200).json({ 
-        reply: `I couldn't find any products matching "${query}". Try searching for categories like Electronics, Fashion, or specific item names!` 
+        reply: `I couldn't find any products matching "${query}". Try searching for specific item names or categories like Electronics or Fashion!` 
       });
     }
 
