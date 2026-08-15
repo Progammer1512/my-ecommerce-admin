@@ -513,7 +513,7 @@ function App() {
     setDynamicAttributeNames(dynamicAttributeNames.filter(a => a !== attrName));
   };
 
-  // 🟢 ADD DYNAMIC VARIANT OPTION (WITH AUTO-SYNC FOR BASE PRICE & TOTAL STOCK)
+  // 🟢 ADD DYNAMIC VARIANT OPTION (WITH SMART AUTO-CALCULATE FOR BASE PRICE & TOTAL STOCK)
   const handleAddDynamicVariant = () => {
     const parsedPrice = Number(variantPrice);
     const parsedStock = Number(variantStock);
@@ -539,7 +539,7 @@ function App() {
     const updatedVariants = [...variants, newOption];
     setVariants(updatedVariants);
 
-    // ⚡ AUTO-SYNC: Base Price becomes minimum variant price & Base Stock becomes sum of stocks
+    // ⚡ AUTO-CALCULATION: Update Base Price with minimum variant price & Base Stock with total sum
     const minPrice = Math.min(...updatedVariants.map(v => v.price));
     const totalStock = updatedVariants.reduce((sum, v) => sum + v.stock, 0);
     setPrice(minPrice);
@@ -754,7 +754,7 @@ function App() {
     }
   };
 
-  // 🟢 SAVE PRODUCT (SMART PRICE/STOCK CALCULATION & FULL SYNC)
+  // 🟢 SAVE PRODUCT WITH NESTED PATHS & DYNAMIC ATTRIBUTES (AUTO-SYNC INTEGRATED)
   const handleProductSubmit = async (e) => {
     e.preventDefault();
     
@@ -768,6 +768,7 @@ function App() {
 
     const finalImagesList = images.length > 0 ? images : (image ? [image] : []);
     const finalCoverImage = finalImagesList.length > 0 ? finalImagesList[0] : (image || '');
+
     const primaryCategory = selectedCategoryPath[selectedCategoryPath.length - 1] || 'General';
 
     const productData = { 
@@ -788,10 +789,10 @@ function App() {
     try {
       if (editingId) {
         await axios.put(`${BASE_URL}/api/products/${editingId}`, productData, getAuthHeader());
-        alert(`✅ Product '${name}' Updated!`);
+        alert(`✅ Product '${name}' Updated with Dynamic Variants & Multi-Images!`);
       } else {
         await axios.post(`${BASE_URL}/api/products`, productData, getAuthHeader());
-        alert(`🎉 New Product Created!`);
+        alert(`🎉 New Product Created with Dynamic Variants!`);
       }
       resetProductForm();
       fetchData();
@@ -1449,8 +1450,8 @@ function App() {
                   <form onSubmit={handleProductSubmit}>
                     
                     <div className="mb-2">
-                      <label className="form-label fw-semibold">Product Title</label>
-                      <input type="text" className="form-control" required value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. RTX 4070 Super" />
+                      <label className="form-label fw-semibold">Title</label>
+                      <input type="text" className="form-control" required value={name} onChange={(e) => setName(e.target.value)} />
                     </div>
 
                     <div className="row mb-2">
@@ -1469,7 +1470,7 @@ function App() {
                       </div>
                       <div className="col-6">
                         <label className="form-label fw-semibold">
-                          Total Stock {variants.length > 0 && <span className="badge bg-info text-dark" style={{ fontSize: '9px' }}>Auto (Sum)</span>}
+                          Base Stock {variants.length > 0 && <span className="badge bg-info text-dark" style={{ fontSize: '9px' }}>Auto (Sum)</span>}
                         </label>
                         <input 
                           type="number" 
@@ -1484,11 +1485,14 @@ function App() {
                     {/* 🟢 CATEGORY HIERARCHY SELECTOR */}
                     <div className="row mb-2">
                       <div className="col-6">
-                        <label className="form-label fw-bold small text-primary">Category Branch</label>
+                        <label className="form-label fw-bold small text-primary">Select Category Branch</label>
                         <select 
                           className="form-select fw-bold"
                           value={selectedCategoryPath[selectedCategoryPath.length - 1] || 'General'}
-                          onChange={(e) => setSelectedCategoryPath([e.target.value])}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setSelectedCategoryPath([val]);
+                          }}
                         >
                           <option value="General">General</option>
                           {rawCategoriesList.map((cat) => (
@@ -1599,7 +1603,7 @@ function App() {
                       </div>
 
                       <div className="p-2 border rounded bg-white mb-2">
-                        <span className="small fw-bold text-dark d-block mb-1">Enter Option Value & Price:</span>
+                        <span className="small fw-bold text-dark d-block mb-1">Enter Values & Custom Price for Option:</span>
                         <div className="row g-2 mb-2">
                           {dynamicAttributeNames.map((attr, idx) => (
                             <div key={idx} className="col-6">
@@ -1607,7 +1611,7 @@ function App() {
                               <input 
                                 type="text" 
                                 className="form-control form-control-sm fw-bold" 
-                                placeholder={`e.g. ${attr === 'Size' ? 'XL' : attr === 'Capacity' ? '12GB' : 'Val'}`}
+                                placeholder={`e.g. ${attr === 'Size' ? 'XL' : attr === 'Capacity' ? '1 TB' : 'Val'}`}
                                 value={variantInputs[attr] || ''} 
                                 onChange={(e) => setVariantInputs({ ...variantInputs, [attr]: e.target.value })} 
                               />
