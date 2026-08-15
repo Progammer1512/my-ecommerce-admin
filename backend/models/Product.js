@@ -25,6 +25,7 @@ const productSchema = new mongoose.Schema({
         type: [String],
         default: []
     },
+    // 📸 Main Product Cover & Multi-Angle Gallery
     image: {
         type: String,
         default: ''
@@ -38,7 +39,7 @@ const productSchema = new mongoose.Schema({
         type: [String],
         default: []
     },
-    // 🟢 Dynamic Variants with Custom Pricing & Stock
+    // 🟢 Dynamic Variants with Custom Pricing, Stock & Dedicated Multi-Image Gallery
     variants: {
         type: [{
             attributes: {
@@ -49,7 +50,9 @@ const productSchema = new mongoose.Schema({
             color: { type: String, default: '' },
             size: { type: String, default: '' },
             price: { type: Number, required: true },
-            stock: { type: Number, default: 0 }
+            stock: { type: Number, default: 0 },
+            image: { type: String, default: '' },      // Variant Cover Photo
+            images: { type: [String], default: [] }   // 📸 Variant Multi-Angle Gallery Images
         }],
         default: []
     },
