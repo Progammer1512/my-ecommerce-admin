@@ -63,7 +63,7 @@ const Category = resolveModel(rawCategory, 'Category', {
   slug: { type: String, default: '' }
 }, 'categories');
 
-// 5. 🟢 FULLY DYNAMIC PRODUCT MODEL
+// 5. 🟢 FULLY DYNAMIC PRODUCT MODEL (WITH VARIANT-LEVEL MULTI-IMAGE GALLERY)
 let rawProd; try { rawProd = require('./models/Product'); } catch (e) {}
 const Product = resolveModel(rawProd, 'Product', {
   name: { type: String, required: true, trim: true },
@@ -80,7 +80,9 @@ const Product = resolveModel(rawProd, 'Product', {
       color: { type: String, default: '' },
       size: { type: String, default: '' },
       price: { type: Number, required: true },
-      stock: { type: Number, default: 0 }
+      stock: { type: Number, default: 0 },
+      image: { type: String, default: '' },
+      images: { type: [String], default: [] }
     }],
     default: []
   },
@@ -530,7 +532,7 @@ app.delete('/api/auth/admin-users/:id', async (req, res) => {
 });
 
 // =========================================================================
-// 🟢 4. PRODUCTS MANAGEMENT (NESTED CATEGORY PATHS & DYNAMIC ATTRIBUTES)
+// 🟢 4. PRODUCTS MANAGEMENT (WITH DEDICATED VARIANT MULTI-IMAGE SUPPORT)
 // =========================================================================
 
 app.get('/api/products', async (req, res) => {
@@ -555,15 +557,27 @@ app.post('/api/products', async (req, res) => {
 
     const coverImage = (galleryImages.length > 0) ? galleryImages[0] : (image || '');
 
+    // 🟢 Parse Variants with dedicated images array & cover image
     let parsedVariants = [];
     if (Array.isArray(variants)) {
-      parsedVariants = variants.map(v => ({
-        attributes: v.attributes || {},
-        color: v.color || '',
-        size: v.size || '',
-        price: Number(v.price) || Number(price) || 0,
-        stock: Number(v.stock) || 0
-      }));
+      parsedVariants = variants.map(v => {
+        let varImgs = [];
+        if (Array.isArray(v.images) && v.images.length > 0) {
+          varImgs = v.images.filter(Boolean);
+        } else if (v.image) {
+          varImgs = [v.image];
+        }
+
+        return {
+          attributes: v.attributes || {},
+          color: v.color || '',
+          size: v.size || '',
+          price: Number(v.price) || Number(price) || 0,
+          stock: Number(v.stock) || 0,
+          image: varImgs.length > 0 ? varImgs[0] : (v.image || ''),
+          images: varImgs
+        };
+      });
     }
 
     const newProd = new Product({
@@ -613,14 +627,26 @@ app.put('/api/products/:id', async (req, res) => {
       updateData.images = [updateData.image];
     }
 
+    // 🟢 Parse Variants with dedicated images array on update
     if (updateData.variants && Array.isArray(updateData.variants)) {
-      updateData.variants = updateData.variants.map(v => ({
-        attributes: v.attributes || {},
-        color: v.color || '',
-        size: v.size || '',
-        price: Number(v.price) || Number(updateData.price) || 0,
-        stock: Number(v.stock) || 0
-      }));
+      updateData.variants = updateData.variants.map(v => {
+        let varImgs = [];
+        if (Array.isArray(v.images) && v.images.length > 0) {
+          varImgs = v.images.filter(Boolean);
+        } else if (v.image) {
+          varImgs = [v.image];
+        }
+
+        return {
+          attributes: v.attributes || {},
+          color: v.color || '',
+          size: v.size || '',
+          price: Number(v.price) || Number(updateData.price) || 0,
+          stock: Number(v.stock) || 0,
+          image: varImgs.length > 0 ? varImgs[0] : (v.image || ''),
+          images: varImgs
+        };
+      });
     }
 
     const updated = await Product.findByIdAndUpdate(
@@ -935,7 +961,7 @@ app.delete('/api/coupons/:id', async (req, res) => {
 });
 
 app.get('/', (req, res) => {
-  res.send('🚀 TechStore Universal Central Backend Active with Infinite Nested Categories & Dynamic Attributes!');
+  res.send('🚀 TechStore Universal Central Backend Active with Infinite Nested Categories & Dedicated Variant Multi-Images!');
 });
 
 // =========================================================================
