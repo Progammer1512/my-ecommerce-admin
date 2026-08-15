@@ -975,7 +975,7 @@ app.delete('/api/coupons/:id', async (req, res) => {
 // =========================================================================
 app.post('/api/ai/chat', async (req, res) => {
   try {
-    const { message, userEmail } = req.body;
+    const { message, userEmail, currentProductName } = req.body;
     if (!message || !message.trim()) {
       return res.status(400).json({ reply: "Please ask me about any product or order!" });
     }
@@ -1026,14 +1026,22 @@ app.post('/api/ai/chat', async (req, res) => {
       return res.status(200).json({ reply: orderReply.trim() });
     }
 
-    // 🟢 4. Search Products
-    const matchedProducts = await Product.find({
-      $or: [
-        { name: { $regex: query, $options: 'i' } },
-        { description: { $regex: query, $options: 'i' } },
-        { category: { $regex: query, $options: 'i' } }
-      ]
-    }).limit(2).lean();
+    // 🟢 4. Context Query: If user is viewing a product and asks about price, stock, variants, details
+    const contextWords = ['price', 'stock', 'variant', 'variants', 'color', 'size', 'detail', 'details', 'cost', 'rate', 'specs', 'kitna', 'bhav', 'rupaye'];
+    let searchFilter = {};
+    if (currentProductName && (contextWords.some(w => lowerQuery.includes(w)) || lowerQuery.length <= 6)) {
+      searchFilter = { name: currentProductName };
+    } else {
+      searchFilter = {
+        $or: [
+          { name: { $regex: query, $options: 'i' } },
+          { description: { $regex: query, $options: 'i' } },
+          { category: { $regex: query, $options: 'i' } }
+        ]
+      };
+    }
+
+    const matchedProducts = await Product.find(searchFilter).limit(2).lean();
 
     if (matchedProducts.length === 0) {
       return res.status(200).json({ 
