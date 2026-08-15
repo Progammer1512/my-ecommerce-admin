@@ -960,8 +960,62 @@ app.delete('/api/coupons/:id', async (req, res) => {
   }
 });
 
+// =========================================================================
+// 🟢 6. STORE AI ASSISTANT ENDPOINT (SEARCH PRODUCTS, VARIANTS & STOCK)
+// =========================================================================
+app.post('/api/ai/chat', async (req, res) => {
+  try {
+    const { message } = req.body;
+    if (!message || !message.trim()) {
+      return res.status(400).json({ reply: "Please ask me about any product or store item!" });
+    }
+
+    const query = message.trim();
+    // Search products matching name or description
+    const matchedProducts = await Product.find({
+      $or: [
+        { name: { $regex: query, $options: 'i' } },
+        { description: { $regex: query, $options: 'i' } },
+        { category: { $regex: query, $options: 'i' } }
+      ]
+    }).limit(3).lean();
+
+    if (matchedProducts.length === 0) {
+      return res.status(200).json({ 
+        reply: `I couldn't find any products matching "${query}". Try searching for categories like Electronics, Fashion, or specific item names!` 
+      });
+    }
+
+    let responseText = "";
+    matchedProducts.forEach((p, idx) => {
+      responseText += `📦 **${p.name}**\n`;
+      responseText += `💰 Price: ₹${p.price}\n`;
+      responseText += `📂 Category: ${p.category || 'General'}\n`;
+      responseText += `📝 Description: ${p.description || 'No description provided.'}\n`;
+      
+      const totalStock = getProductStock(p);
+      responseText += `📊 Total Stock Available: ${totalStock}\n`;
+
+      if (p.variants && p.variants.length > 0) {
+        responseText += `✨ **Available Options & Variants:**\n`;
+        p.variants.forEach((v, vIdx) => {
+          const rawAttrs = v.attributes instanceof Map ? Object.fromEntries(v.attributes) : (v.attributes || {});
+          const attrStr = Object.entries(rawAttrs).map(([k, val]) => `${k}: ${val}`).join(', ');
+          const optionLabel = attrStr || (v.size ? `Size: ${v.size}` : '') || (v.color ? `Color: ${v.color}` : `Variant #${vIdx + 1}`);
+          responseText.h += `  • [${optionLabel}] - ₹${v.price} (Stock: ${v.stock})\n`;
+        });
+      }
+      responseText += `\n`;
+    });
+
+    return res.status(200).json({ reply: responseText.trim() });
+  } catch (err) {
+    return res.status(500).json({ reply: "Sorry, I encountered an error while processing your request. Please try again." });
+  }
+});
+
 app.get('/', (req, res) => {
-  res.send('🚀 TechStore Universal Central Backend Active with Infinite Nested Categories & Dedicated Variant Multi-Images!');
+  res.send('🚀 TechStore Universal Central Backend Active with AI Assistant & Infinite Nested Categories!');
 });
 
 // =========================================================================
