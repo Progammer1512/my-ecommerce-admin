@@ -991,14 +991,22 @@ app.post('/api/ai/chat', async (req, res) => {
       });
     }
 
-    // 🟢 2. Search Products if it's a product-related query
+    // 🟢 2. Check for Appreciation / Thanks / Common polite words
+    const thanksWords = ['thank you', 'thanks', 'thx', 'thank u', 'ok', 'okay', 'great', 'nice', 'bye', 'goodbye', 'dost', 'bhai'];
+    if (thanksWords.some(word => lowerQuery === word || lowerQuery.includes(word))) {
+      return res.status(200).json({ 
+        reply: "You're very welcome! 😊 Feel free to ask if you need help with any other product or order." 
+      });
+    }
+
+    // 🟢 3. Search Products if it's a product-related query (Using strict text match or regex)
     const matchedProducts = await Product.find({
       $or: [
         { name: { $regex: query, $options: 'i' } },
         { description: { $regex: query, $options: 'i' } },
         { category: { $regex: query, $options: 'i' } }
       ]
-    }).limit(3).lean();
+    }).limit(2).lean();
 
     if (matchedProducts.length === 0) {
       return res.status(200).json({ 
