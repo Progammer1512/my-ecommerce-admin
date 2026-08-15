@@ -971,27 +971,27 @@ app.delete('/api/coupons/:id', async (req, res) => {
 });
 
 // =========================================================================
-// 🟢 6. STORE AI ASSISTANT ENDPOINT (SMART GREETING & SEARCH)
+// 🟢 6. STORE AI ASSISTANT ENDPOINT (FULL E-COMMERCE KNOWLEDGE & ORDERS)
 // =========================================================================
 app.post('/api/ai/chat', async (req, res) => {
   try {
-    const { message } = req.body;
+    const { message, userEmail } = req.body;
     if (!message || !message.trim()) {
-      return res.status(400).json({ reply: "Please ask me about any product or store item!" });
+      return res.status(400).json({ reply: "Please ask me about any product or order!" });
     }
 
     const query = message.trim();
     const lowerQuery = query.toLowerCase();
 
-    // 🟢 1. Check for Greetings (Hi, Hello, Hey, etc.)
+    // 🟢 1. Check for Greetings
     const greetings = ['hi', 'hello', 'hey', 'greetings', 'good morning', 'good evening', 'good afternoon', 'sup', 'hola'];
     if (greetings.includes(lowerQuery) || lowerQuery.startsWith('hi ') || lowerQuery.startsWith('hello ')) {
       return res.status(200).json({ 
-        reply: "Hello! 👋 Welcome to TechStore. How can I help you today? You can ask me about any product, its variations, or stock availability!" 
+        reply: "Hello! 👋 Welcome to TechStore. How can I help you today? You can ask me about products, stock, variants, or check your placed orders and returns!" 
       });
     }
 
-    // 🟢 2. Check for Appreciation / Thanks / Common polite words
+    // 🟢 2. Check for Appreciation / Thanks
     const thanksWords = ['thank you', 'thanks', 'thx', 'thank u', 'ok', 'okay', 'great', 'nice', 'bye', 'goodbye', 'dost', 'bhai'];
     if (thanksWords.some(word => lowerQuery === word || lowerQuery.includes(word))) {
       return res.status(200).json({ 
@@ -999,7 +999,34 @@ app.post('/api/ai/chat', async (req, res) => {
       });
     }
 
-    // 🟢 3. Search Products if it's a product-related query (Using strict text match or regex)
+    // 🟢 3. Check for Orders / Tracking / Returns / Refunds
+    const orderKeywords = ['order', 'track', 'shipping', 'delivery', 'refund', 'return', 'replacement', 'status', 'history'];
+    if (orderKeywords.some(keyword => lowerQuery.includes(keyword))) {
+      if (!userEmail) {
+        return res.status(200).json({ 
+          reply: "To check your orders, tracking, or returns, please sign in to your account first so I can fetch your order records!" 
+        });
+      }
+
+      const userOrders = await Order.find({ userEmail: userEmail.toLowerCase().trim() }).sort({ createdAt: -1 }).limit(3).lean();
+      if (!userOrders || userOrders.length === 0) {
+        return res.status(200).json({ reply: `I couldn't find any recent orders associated with your email (${userEmail}).` });
+      }
+
+      let orderReply = `📦 **Your Recent Orders & Status:**\n\n`;
+      userOrders.forEach((o) => {
+        orderReply += `• **Order ID:** #${o._id}\n`;
+        orderReply += `  Status: **${o.status || 'Processing'}**\n`;
+        orderReply += `  Total: ₹${o.totalPrice} (${o.paymentMethod || 'COD'})\n`;
+        if (o.orderItems && o.orderItems.length > 0) {
+          orderReply += `  Items: ${o.orderItems.map(i => `${i.name} (Qty: ${i.qty})`).join(', ')}\n`;
+        }
+        orderReply += `\n`;
+      });
+      return res.status(200).json({ reply: orderReply.trim() });
+    }
+
+    // 🟢 4. Search Products
     const matchedProducts = await Product.find({
       $or: [
         { name: { $regex: query, $options: 'i' } },
