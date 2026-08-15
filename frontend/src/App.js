@@ -59,6 +59,8 @@ function App() {
   const [rawCategoriesList, setRawCategoriesList] = useState([]);
   const [selectedParentCategory, setSelectedParentCategory] = useState('');
   const [newNestedCategoryName, setNewNestedCategoryName] = useState('');
+  const [showInlineCategoryInput, setShowInlineCategoryInput] = useState(false);
+  const [inlineCategoryName, setInlineCategoryName] = useState('');
 
   // ADMIN USERS MANAGEMENT STATES
   const [adminUsersList, setAdminUsersList] = useState([]);
@@ -262,13 +264,34 @@ function App() {
         : [];
       setProducts(sortedProducts);
 
-      // Fetch Nested Categories Tree
+      // Fetch Nested Categories Tree and combine with existing product categories
       try {
         const catRes = await axios.get(`${BASE_URL}/api/categories`, authConfig);
-        if (catRes.data && catRes.data.tree) {
-          setCategoryTree(catRes.data.tree);
-          setRawCategoriesList(catRes.data.categories || []);
+        let combinedCats = [];
+        if (catRes.data && catRes.data.categories) {
+          combinedCats = catRes.data.categories;
+          setCategoryTree(catRes.data.tree || []);
         }
+
+        const prodCategories = Array.isArray(fetchedProducts)
+          ? Array.from(new Set(fetchedProducts.map(p => p.category).filter(Boolean)))
+          : [];
+
+        const existingNames = new Set(combinedCats.map(c => c.name));
+        prodCategories.forEach(catName => {
+          if (!existingNames.has(catName)) {
+            combinedCats.push({ _id: catName, name: catName });
+          }
+        });
+
+        // Ensure standard categories exist as defaults
+        ['General', 'Electronics', 'Fashion', 'Pets', 'Footwear', 'Accessories'].forEach(defaultCat => {
+          if (!existingNames.has(defaultCat) && !combinedCats.some(c => c.name === defaultCat)) {
+            combinedCats.push({ _id: defaultCat, name: defaultCat });
+          }
+        });
+
+        setRawCategoriesList(combinedCats);
       } catch (catErr) {
         console.warn("Categories fetch fallback");
       }
@@ -341,6 +364,25 @@ function App() {
       fetchData();
     } catch (err) {
       alert("Failed to create category: " + (err.response?.data?.message || err.message));
+    }
+  };
+
+  // 🟢 QUICK INLINE CATEGORY ADDER (DIRECT FROM PRODUCT FORM)
+  const handleQuickAddInlineCategory = async () => {
+    if (!inlineCategoryName.trim()) return alert("Enter category name!");
+    const cleanName = inlineCategoryName.trim();
+    try {
+      await axios.post(`${BASE_URL}/api/categories`, { name: cleanName }, getAuthHeader());
+      alert(`✅ Category '${cleanName}' added!`);
+      setSelectedCategoryPath([cleanName]);
+      setInlineCategoryName('');
+      setShowInlineCategoryInput(false);
+      fetchData();
+    } catch (err) {
+      setRawCategoriesList(prev => [...prev, { _id: cleanName, name: cleanName }]);
+      setSelectedCategoryPath([cleanName]);
+      setInlineCategoryName('');
+      setShowInlineCategoryInput(false);
     }
   };
 
@@ -1482,10 +1524,20 @@ function App() {
                       </div>
                     </div>
 
-                    {/* 🟢 CATEGORY HIERARCHY SELECTOR */}
+                    {/* 🟢 CATEGORY BRANCH SELECTOR WITH INLINE QUICK ADD */}
                     <div className="row mb-2">
-                      <div className="col-6">
-                        <label className="form-label fw-bold small text-primary">Select Category Branch</label>
+                      <div className="col-8">
+                        <div className="d-flex justify-content-between align-items-center mb-1">
+                          <label className="form-label fw-bold small text-primary m-0">Category Branch</label>
+                          <button 
+                            type="button" 
+                            className="btn btn-link btn-sm p-0 text-decoration-none fw-bold" 
+                            style={{ fontSize: '11px' }}
+                            onClick={() => setShowInlineCategoryInput(!showInlineCategoryInput)}
+                          >
+                            {showInlineCategoryInput ? 'Cancel' : '+ New Category'}
+                          </button>
+                        </div>
                         <select 
                           className="form-select fw-bold"
                           value={selectedCategoryPath[selectedCategoryPath.length - 1] || 'General'}
@@ -1495,15 +1547,15 @@ function App() {
                           }}
                         >
                           <option value="General">General</option>
-                          {rawCategoriesList.map((cat) => (
-                            <option key={cat._id} value={cat.name}>
+                          {rawCategoriesList.map((cat, idx) => (
+                            <option key={cat._id || idx} value={cat.name}>
                               📁 {cat.name}
                             </option>
                           ))}
                         </select>
                       </div>
-                      <div className="col-6">
-                        <label className="form-label fw-bold text-success">⭐ Display Rank</label>
+                      <div className="col-4">
+                        <label className="form-label fw-bold text-success small mb-1">Display Rank</label>
                         <input 
                           type="number" 
                           className="form-control fw-bold border-success" 
@@ -1514,6 +1566,25 @@ function App() {
                         />
                       </div>
                     </div>
+
+                    {/* INLINE QUICK ADD CATEGORY BOX */}
+                    {showInlineCategoryInput && (
+                      <div className="p-2 mb-2 bg-light border rounded shadow-sm">
+                        <span className="small fw-bold text-dark d-block mb-1">Add Quick Category:</span>
+                        <div className="input-group input-group-sm">
+                          <input 
+                            type="text" 
+                            className="form-control" 
+                            placeholder="e.g. Graphics Cards"
+                            value={inlineCategoryName} 
+                            onChange={(e) => setInlineCategoryName(e.target.value)} 
+                          />
+                          <button type="button" className="btn btn-primary fw-bold" onClick={handleQuickAddInlineCategory}>
+                            Save
+                          </button>
+                        </div>
+                      </div>
+                    )}
 
                     {/* 📸 MULTIPLE GALLERY IMAGES SECTION */}
                     <div className="mb-3 p-3 bg-light rounded border">
