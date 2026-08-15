@@ -513,7 +513,7 @@ function App() {
     setDynamicAttributeNames(dynamicAttributeNames.filter(a => a !== attrName));
   };
 
-  // 🟢 ADD DYNAMIC VARIANT OPTION (Size / Color / Capacity / Speed)
+  // 🟢 ADD DYNAMIC VARIANT OPTION (WITH AUTO-SYNC FOR BASE PRICE & TOTAL STOCK)
   const handleAddDynamicVariant = () => {
     const parsedPrice = Number(variantPrice);
     const parsedStock = Number(variantStock);
@@ -536,13 +536,26 @@ function App() {
       stock: isNaN(parsedStock) ? 0 : parsedStock
     };
 
-    setVariants([...variants, newOption]);
+    const updatedVariants = [...variants, newOption];
+    setVariants(updatedVariants);
+
+    // ⚡ AUTO-SYNC: Base Price becomes minimum variant price & Base Stock becomes sum of stocks
+    const minPrice = Math.min(...updatedVariants.map(v => v.price));
+    const totalStock = updatedVariants.reduce((sum, v) => sum + v.stock, 0);
+    setPrice(minPrice);
+    setStock(totalStock);
+
     setVariantPrice('');
     setVariantStock('');
   };
 
   const handleRemoveVariant = (indexToRemove) => {
-    setVariants(variants.filter((_, idx) => idx !== indexToRemove));
+    const updated = variants.filter((_, idx) => idx !== indexToRemove);
+    setVariants(updated);
+    if (updated.length > 0) {
+      setPrice(Math.min(...updated.map(v => v.price)));
+      setStock(updated.reduce((sum, v) => sum + v.stock, 0));
+    }
   };
 
   const handleImageFileUpload = (e, targetSetter) => {
@@ -632,6 +645,74 @@ function App() {
     }
   };
 
+  const handleCsvUpload = (e) => {
+    e.preventDefault();
+    if (!csvFile) return alert('Please select a CSV file first!');
+
+    Papa.parse(csvFile, {
+      header: true,
+      skipEmptyLines: true,
+      transformHeader: (h) => h.trim().toLowerCase().replace(/^\ufeff/, ''),
+      complete: async (results) => {
+        const rows = results.data;
+        if (!rows || rows.length === 0) {
+          return alert('CSV file is empty or missing data rows!');
+        }
+
+        const authConfig = getAuthHeader();
+
+        try {
+          const uploadPromises = rows.map((row) => {
+            const cleanRow = {};
+            Object.keys(row).forEach((k) => {
+              cleanRow[k.trim().toLowerCase()] = row[k];
+            });
+
+            const rawName = cleanRow.name || cleanRow.title || 'Imported Item';
+            const rawPrice = parseCleanStock(cleanRow.price);
+            const rawCategory = cleanRow.category || 'General';
+            
+            const rawDesc = (cleanRow.description && String(cleanRow.description).trim().length > 0) 
+              ? String(cleanRow.description).trim() 
+              : `High quality verified ${rawCategory} product.`;
+
+            const rawImage = cleanRow.image || 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=500';
+            const rawImages = cleanRow.images ? cleanRow.images.split('|') : [rawImage];
+            const rawStock = parseCleanStock(cleanRow.stock || cleanRow.countinstock || cleanRow.quantity || cleanRow.qty);
+            const rawPriority = cleanRow.priority ? Number(cleanRow.priority) : 100;
+
+            const productPayload = {
+              name: String(rawName).trim(),
+              price: rawPrice || 999,
+              category: String(rawCategory).trim(),
+              categoryPath: [String(rawCategory).trim()],
+              description: rawDesc,
+              image: String(rawImage).trim(),
+              images: rawImages,
+              variants: [],
+              stock: rawStock,
+              countInStock: rawStock,
+              priority: rawPriority
+            };
+
+            return axios.post(`${BASE_URL}/api/products`, productPayload, authConfig);
+          });
+
+          await Promise.all(uploadPromises);
+          alert(`🎉 Successfully uploaded ${rows.length} products to MongoDB!`);
+          setCsvFile(null);
+          fetchData();
+        } catch (error) {
+          console.error('CSV Import Error:', error);
+          alert('Upload Error: ' + (error.response?.data?.message || error.message));
+        }
+      },
+      error: (err) => {
+        alert('Error parsing CSV file: ' + err.message);
+      }
+    });
+  };
+
   const handleBulkDeleteProducts = async (deleteAll = false) => {
     const targets = deleteAll ? products.map(p => p._id || p.id) : selectedProductIds;
     
@@ -673,20 +754,25 @@ function App() {
     }
   };
 
-  // 🟢 SAVE PRODUCT WITH NESTED PATHS & DYNAMIC ATTRIBUTES
+  // 🟢 SAVE PRODUCT (SMART PRICE/STOCK CALCULATION & FULL SYNC)
   const handleProductSubmit = async (e) => {
     e.preventDefault();
-    const parsedStock = parseCleanStock(stock);
-    const parsedPriority = Number(productPriority) || 100;
     
+    let finalPrice = Number(price) || 0;
+    let finalStock = Number(stock) || 0;
+
+    if (variants.length > 0) {
+      finalPrice = Math.min(...variants.map(v => v.price));
+      finalStock = variants.reduce((sum, v) => sum + v.stock, 0);
+    }
+
     const finalImagesList = images.length > 0 ? images : (image ? [image] : []);
     const finalCoverImage = finalImagesList.length > 0 ? finalImagesList[0] : (image || '');
-
     const primaryCategory = selectedCategoryPath[selectedCategoryPath.length - 1] || 'General';
 
     const productData = { 
       name, 
-      price: parseCleanStock(price), 
+      price: finalPrice, 
       category: primaryCategory,
       categoryPath: selectedCategoryPath,
       description: description || 'High quality store product.', 
@@ -694,18 +780,18 @@ function App() {
       images: finalImagesList,
       dynamicAttributeNames,
       variants: variants || [],
-      stock: parsedStock,
-      countInStock: parsedStock,
-      priority: parsedPriority
+      stock: finalStock,
+      countInStock: finalStock,
+      priority: Number(productPriority) || 100
     };
 
     try {
       if (editingId) {
         await axios.put(`${BASE_URL}/api/products/${editingId}`, productData, getAuthHeader());
-        alert(`✅ Product '${name}' Updated with Dynamic Variants & Multi-Images!`);
+        alert(`✅ Product '${name}' Updated!`);
       } else {
         await axios.post(`${BASE_URL}/api/products`, productData, getAuthHeader());
-        alert(`🎉 New Product Created with Dynamic Variants!`);
+        alert(`🎉 New Product Created!`);
       }
       resetProductForm();
       fetchData();
@@ -1335,6 +1421,27 @@ function App() {
           <div>
             <h3 className="fw-bold mb-4">Product Information & Dynamic Attributes Pricing (PIM)</h3>
 
+            {/* CSV BULK UPLOAD */}
+            <div className="card border-0 shadow-sm p-4 bg-white mb-4">
+              <h5 className="fw-bold mb-3 text-success">
+                <i className="bi bi-file-earmark-spreadsheet me-2"></i>Bulk Product Upload (CSV)
+              </h5>
+              <form onSubmit={handleCsvUpload} className="d-flex gap-3 align-items-center">
+                <input 
+                  type="file" 
+                  className="form-control" 
+                  accept=".csv" 
+                  onChange={(e) => setCsvFile(e.target.files[0])} 
+                />
+                <button type="submit" className="btn btn-success fw-bold text-nowrap">
+                  <i className="bi bi-upload me-1"></i> Upload CSV
+                </button>
+              </form>
+              <small className="text-muted mt-2 d-block">
+                CSV Headers: <code>name, price, category, description, image, images (pipe | separated), stock, priority</code>
+              </small>
+            </div>
+
             <div className="row g-4">
               <div className="col-lg-5">
                 <div className="card border-0 shadow-sm p-4 bg-white">
@@ -1342,17 +1449,28 @@ function App() {
                   <form onSubmit={handleProductSubmit}>
                     
                     <div className="mb-2">
-                      <label className="form-label fw-semibold">Title</label>
-                      <input type="text" className="form-control" required value={name} onChange={(e) => setName(e.target.value)} />
+                      <label className="form-label fw-semibold">Product Title</label>
+                      <input type="text" className="form-control" required value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. RTX 4070 Super" />
                     </div>
-                    
+
                     <div className="row mb-2">
                       <div className="col-6">
-                        <label className="form-label fw-semibold">Base Price (₹)</label>
-                        <input type="number" className="form-control" required value={price} onChange={(e) => setPrice(e.target.value)} />
+                        <label className="form-label fw-semibold">
+                          Base Price (₹) {variants.length > 0 && <span className="badge bg-info text-dark" style={{ fontSize: '9px' }}>Auto (Min)</span>}
+                        </label>
+                        <input 
+                          type="number" 
+                          className="form-control" 
+                          required 
+                          value={price} 
+                          onChange={(e) => setPrice(e.target.value)} 
+                          placeholder="e.g. 55000"
+                        />
                       </div>
                       <div className="col-6">
-                        <label className="form-label fw-semibold">Base Stock</label>
+                        <label className="form-label fw-semibold">
+                          Total Stock {variants.length > 0 && <span className="badge bg-info text-dark" style={{ fontSize: '9px' }}>Auto (Sum)</span>}
+                        </label>
                         <input 
                           type="number" 
                           className="form-control" 
@@ -1364,35 +1482,33 @@ function App() {
                     </div>
 
                     {/* 🟢 CATEGORY HIERARCHY SELECTOR */}
-                    <div className="mb-2">
-                      <label className="form-label fw-bold small text-primary">Select Category Branch</label>
-                      <select 
-                        className="form-select fw-bold"
-                        value={selectedCategoryPath[selectedCategoryPath.length - 1] || 'General'}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          setSelectedCategoryPath([val]);
-                        }}
-                      >
-                        <option value="General">General</option>
-                        {rawCategoriesList.map((cat) => (
-                          <option key={cat._id} value={cat.name}>
-                            📁 {cat.name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div className="mb-2">
-                      <label className="form-label fw-bold text-success">⭐ Display Rank</label>
-                      <input 
-                        type="number" 
-                        className="form-control fw-bold border-success" 
-                        min="1" 
-                        placeholder="1 (Top Position)" 
-                        value={productPriority} 
-                        onChange={(e) => setProductPriority(e.target.value)} 
-                      />
+                    <div className="row mb-2">
+                      <div className="col-6">
+                        <label className="form-label fw-bold small text-primary">Category Branch</label>
+                        <select 
+                          className="form-select fw-bold"
+                          value={selectedCategoryPath[selectedCategoryPath.length - 1] || 'General'}
+                          onChange={(e) => setSelectedCategoryPath([e.target.value])}
+                        >
+                          <option value="General">General</option>
+                          {rawCategoriesList.map((cat) => (
+                            <option key={cat._id} value={cat.name}>
+                              📁 {cat.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="col-6">
+                        <label className="form-label fw-bold text-success">⭐ Display Rank</label>
+                        <input 
+                          type="number" 
+                          className="form-control fw-bold border-success" 
+                          min="1" 
+                          placeholder="1 (Top Position)" 
+                          value={productPriority} 
+                          onChange={(e) => setProductPriority(e.target.value)} 
+                        />
+                      </div>
                     </div>
 
                     {/* 📸 MULTIPLE GALLERY IMAGES SECTION */}
@@ -1460,7 +1576,6 @@ function App() {
                         </label>
                       </div>
 
-                      {/* Add new attribute name dynamically (e.g. Capacity, Speed, Weight, RAM, Size) */}
                       <div className="input-group input-group-sm mb-2">
                         <input 
                           type="text" 
@@ -1483,9 +1598,8 @@ function App() {
                         ))}
                       </div>
 
-                      {/* Input values for each dynamic attribute */}
                       <div className="p-2 border rounded bg-white mb-2">
-                        <span className="small fw-bold text-dark d-block mb-1">Enter Values & Custom Price for Option:</span>
+                        <span className="small fw-bold text-dark d-block mb-1">Enter Option Value & Price:</span>
                         <div className="row g-2 mb-2">
                           {dynamicAttributeNames.map((attr, idx) => (
                             <div key={idx} className="col-6">
@@ -1493,7 +1607,7 @@ function App() {
                               <input 
                                 type="text" 
                                 className="form-control form-control-sm fw-bold" 
-                                placeholder={`e.g. ${attr === 'Size' ? 'XL' : attr === 'Capacity' ? '1 TB' : 'Val'}`}
+                                placeholder={`e.g. ${attr === 'Size' ? 'XL' : attr === 'Capacity' ? '12GB' : 'Val'}`}
                                 value={variantInputs[attr] || ''} 
                                 onChange={(e) => setVariantInputs({ ...variantInputs, [attr]: e.target.value })} 
                               />
@@ -1529,7 +1643,6 @@ function App() {
                         </button>
                       </div>
 
-                      {/* Table of configured dynamic variants */}
                       {variants.length > 0 && (
                         <div className="table-responsive border rounded bg-white">
                           <table className="table table-sm table-bordered m-0 align-middle">
@@ -1735,113 +1848,6 @@ function App() {
                         )}
                       </tbody>
                     </table>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* 🟢 SLIDING BANNERS TAB */}
-        {activeTab === 'banners' && hasTabAccess(userRole, 'banners') && (
-          <div>
-            <h3 className="fw-bold mb-4">Customer Website Hero Banner Manager</h3>
-            <div className="row g-4">
-              <div className="col-lg-5">
-                <div className="card border-0 shadow-sm p-4 bg-white">
-                  <h5 className="fw-bold mb-3">➕ Add New Sliding Offer Banner</h5>
-                  <form onSubmit={handleAddBanner}>
-                    <div className="mb-2">
-                      <label className="form-label fw-semibold">Banner Heading Title</label>
-                      <input type="text" className="form-control" required placeholder="e.g. 🔥 Mega Diwali Electronics Sale!" value={bannerTitle} onChange={(e) => setBannerTitle(e.target.value)} />
-                    </div>
-                    <div className="mb-2">
-                      <label className="form-label fw-semibold">Subtitle Description</label>
-                      <input type="text" className="form-control" placeholder="e.g. Up to 30% OFF on all smart watches" value={bannerSubtitle} onChange={(e) => setBannerSubtitle(e.target.value)} />
-                    </div>
-                    <div className="row mb-2">
-                      <div className="col-6">
-                        <label className="form-label fw-semibold">Badge Code / Tag</label>
-                        <input type="text" className="form-control" placeholder="e.g. USE CODE: DIWALI30" value={bannerBadge} onChange={(e) => setBannerBadge(e.target.value)} />
-                      </div>
-                      <div className="col-6">
-                        <label className="form-label fw-bold text-success">⭐ Display Rank</label>
-                        <input 
-                          type="number" 
-                          className="form-control fw-bold border-success" 
-                          min="1" 
-                          placeholder="1 (First Slide)" 
-                          value={bannerPriority} 
-                          onChange={(e) => setBannerPriority(e.target.value)} 
-                        />
-                      </div>
-                    </div>
-                    <div className="mb-2">
-                      <label className="form-label fw-semibold">Theme Color Style</label>
-                      <select className="form-select" value={bannerBg} onChange={(e) => setBannerBg(e.target.value)}>
-                        <option value="linear-gradient(135deg, #0d6efd 0%, #0a58ca 100%)">Royal Blue</option>
-                        <option value="linear-gradient(135deg, #198754 0%, #146c43 100%)">Forest Green</option>
-                        <option value="linear-gradient(135deg, #dc3545 0%, #b02a37 100%)">Crimson Red</option>
-                        <option value="linear-gradient(135deg, #6f42c1 0%, #593196 100%)">Deep Purple</option>
-                      </select>
-                    </div>
-                    <div className="mb-3">
-                      <label className="form-label fw-semibold">Banner Image URL</label>
-                      <input type="text" className="form-control mb-1" placeholder="https://..." value={bannerImage} onChange={(e) => setBannerImage(e.target.value)} />
-                      <div className="text-center my-1 text-muted small fw-bold">-- OR --</div>
-                      <label className="form-label fw-semibold">Upload Image from Device</label>
-                      <input type="file" className="form-control" accept="image/*" onChange={(e) => handleImageFileUpload(e, setBannerImage)} />
-                    </div>
-                    <button type="submit" className="btn btn-primary w-100 fw-bold py-2">Publish Banner to Site</button>
-                  </form>
-                </div>
-              </div>
-
-              <div className="col-lg-7">
-                <div className="card border-0 shadow-sm p-4 bg-white">
-                  <h5 className="fw-bold mb-3">Live Active Banners ({banners.length}) - Sorted by Display Rank</h5>
-                  <div className="d-flex flex-column gap-3">
-                    {banners.length === 0 ? (
-                      <p className="text-muted">No active banners. Add one using the form.</p>
-                    ) : (
-                      banners.map((b, idx) => {
-                        const bannerId = b._id || b.id;
-                        const currentRank = b.priority !== undefined ? b.priority : (idx + 1);
-
-                        return (
-                        <div key={bannerId} className="p-3 rounded-3 text-white d-flex align-items-center justify-content-between shadow-sm flex-wrap gap-2" style={{ background: b.bg || 'linear-gradient(135deg, #0d6efd 0%, #0a58ca 100%)' }}>
-                          <div className="d-flex align-items-center gap-3">
-                            <span className="badge bg-light text-dark fw-bold fs-6 border shadow-sm">
-                              👑 Rank #{currentRank}
-                            </span>
-                            <div>
-                              <span className="badge bg-warning text-dark fw-bold mb-1">{b.badge || 'PROMO'}</span>
-                              <h5 className="fw-bold m-0">{b.title}</h5>
-                              <small className="opacity-75">{b.subtitle}</small>
-                            </div>
-                          </div>
-
-                          <div className="d-flex align-items-center gap-2 ms-auto">
-                            <div className="d-flex align-items-center gap-1 bg-white p-1 rounded border">
-                              <span className="text-dark small fw-bold ps-1">Rank:</span>
-                              <select 
-                                className="form-select form-select-sm fw-bold border-0 text-success py-0"
-                                style={{ width: '65px' }}
-                                value={currentRank}
-                                onChange={(e) => handleUpdateBannerPriority(b, e.target.value)}
-                              >
-                                {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(r => (
-                                  <option key={r} value={r}>#{r}</option>
-                                ))}
-                              </select>
-                            </div>
-
-                            <img src={getCleanImageUrl(b.img)} alt="Preview" className="rounded border bg-white" width="50" height="50" style={{ objectFit: 'cover' }} />
-                            <button className="btn btn-danger btn-sm fw-bold" onClick={() => handleDeleteBanner(bannerId)}>Delete</button>
-                          </div>
-                        </div>
-                      )})
-                    )}
                   </div>
                 </div>
               </div>
