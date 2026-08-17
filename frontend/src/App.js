@@ -23,6 +23,9 @@ const getCleanImageUrl = (url) => {
   if (typeof url === 'string' && url.includes('localhost:5000')) {
     return url.replace('http://localhost:5000', BASE_URL);
   }
+  if (typeof url === 'string' && url.startsWith('/uploads')) {
+    return `${BASE_URL}${url}`;
+  }
   return url;
 };
 
@@ -37,11 +40,12 @@ const parseCleanStock = (val) => {
 // 🎥 HELPER: DETECT & PARSE YOUTUBE EMBED URL
 const getEmbedUrl = (url) => {
   if (!url) return '';
+  const clean = getCleanImageUrl(url);
   const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
-  const match = url.match(regExp);
+  const match = clean.match(regExp);
   return (match && match[2].length === 11)
     ? `https://www.youtube.com/embed/${match[2]}`
-    : url;
+    : clean;
 };
 
 function App() {
@@ -103,9 +107,10 @@ function App() {
   const [productPriority, setProductPriority] = useState(100);
   const [rankInputs, setRankInputs] = useState({});
 
-  // 🎥 VIDEO STATE (YOUTUBE / DIRECT VIDEO URL)
+  // 🎥 VIDEO STATE & DIRECT FILE UPLOADING STATE
   const [videoUrl, setVideoUrl] = useState('');
   const [videoType, setVideoType] = useState('youtube');
+  const [videoUploading, setVideoUploading] = useState(false);
 
   // 🟢 100% DYNAMIC ATTRIBUTES & MULTI-IMAGE VARIANTS BUILDER
   const [dynamicAttributeNames, setDynamicAttributeNames] = useState(['Size', 'Color']);
@@ -557,6 +562,42 @@ function App() {
     }
   };
 
+  // 🎥 🟢 DIRECT VIDEO FILE UPLOAD HANDLER (MP4 / MOV / WEBM)
+  const handleDirectVideoUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    if (file.size > 50 * 1024 * 1024) {
+      alert("⚠️ Video file is too large! Please choose a video under 50MB.");
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append('video', file);
+
+    try {
+      setVideoUploading(true);
+      const res = await axios.post(`${BASE_URL}/api/upload/video`, formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+          ...getAuthHeader().headers
+        }
+      });
+
+      const uploadedUrl = res.data.videoUrl;
+      const fullVideoUrl = uploadedUrl.startsWith('http') ? uploadedUrl : `${BASE_URL}${uploadedUrl}`;
+
+      setVideoUrl(fullVideoUrl);
+      setVideoType('file');
+      alert('🎉 Video uploaded and attached successfully to product!');
+    } catch (err) {
+      console.error('Video upload failed:', err);
+      alert('Video upload failed: ' + (err.response?.data?.message || err.message));
+    } finally {
+      setVideoUploading(false);
+    }
+  };
+
   // 🟢 COMPRESS & UPLOAD MULTIPLE IMAGES FOR A SPECIFIC VARIANT
   const handleVariantMultiImageUpload = (e) => {
     const files = Array.from(e.target.files);
@@ -662,38 +703,6 @@ function App() {
       setPrice(Math.min(...updated.map(v => v.price)));
       setStock(updated.reduce((sum, v) => sum + v.stock, 0));
     }
-  };
-
-  const handleImageFileUpload = (e, targetSetter) => {
-    const file = e.target.files[0];
-    if (!file) return;
-
-    if (file.size > 5 * 1024 * 1024) {
-      alert('File is too large! Please upload an image under 5MB.');
-      return;
-    }
-
-    const reader = new FileReader();
-    reader.readAsDataURL(file);
-    reader.onload = (event) => {
-      const img = new Image();
-      img.src = event.target.result;
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        const MAX_WIDTH = 1000;
-        const scale = MAX_WIDTH / img.width;
-        
-        canvas.width = scale < 1 ? MAX_WIDTH : img.width;
-        canvas.height = scale < 1 ? img.height * scale : img.height;
-
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-        
-        const compressedBase64 = canvas.toDataURL('image/jpeg', 0.7);
-        targetSetter(compressedBase64);
-        alert('📸 Image processed and ready!');
-      };
-    };
   };
 
   // 🟢 ADD / SAVE BANNER WITH PRIORITY
@@ -976,7 +985,7 @@ function App() {
 
     // Load Video
     if (p.video && p.video.url) {
-      setVideoUrl(p.video.url);
+      setVideoUrl(getCleanImageUrl(p.video.url));
       setVideoType(p.video.videoType || (p.video.url.includes('youtu') ? 'youtube' : 'file'));
     } else {
       setVideoUrl('');
@@ -1025,6 +1034,7 @@ function App() {
     setImages([]);
     setVideoUrl('');
     setVideoType('youtube');
+    setVideoUploading(false);
     setVariants([]);
     setVariantInputs({});
     setVariantPrice('');
@@ -1748,7 +1758,7 @@ function App() {
                       )}
                     </div>
 
-                    {/* 🎥 PRODUCT VIDEO ATTACHMENT SECTION */}
+                    {/* 🎥 PRODUCT VIDEO ATTACHMENT SECTION (URL + DIRECT FILE UPLOAD) */}
                     <div className="mb-3 p-3 bg-light rounded border border-danger border-opacity-25">
                       <div className="d-flex justify-content-between align-items-center mb-2">
                         <label className="form-label fw-bold text-danger m-0">
@@ -1759,6 +1769,7 @@ function App() {
                         )}
                       </div>
 
+                      {/* 1. Paste URL (YouTube or External MP4) */}
                       <div className="input-group input-group-sm mb-2">
                         <span className="input-group-text bg-white fw-bold text-muted" style={{ fontSize: '11px' }}>
                           Video URL:
@@ -1766,7 +1777,7 @@ function App() {
                         <input 
                           type="text" 
                           className="form-control" 
-                          placeholder="Paste YouTube Link or Video URL (https://...)" 
+                          placeholder="Paste YouTube link or Video URL..." 
                           value={videoUrl} 
                           onChange={(e) => {
                             const val = e.target.value;
@@ -1787,8 +1798,24 @@ function App() {
                         )}
                       </div>
 
+                      {/* 2. Direct Video File Upload (MP4 / MOV / WebM) */}
+                      <div className="text-center my-1 text-muted small fw-bold">-- OR UPLOAD MP4 / VIDEO FROM DEVICE / PHONE --</div>
+                      
+                      <div className="d-flex align-items-center gap-2 mb-2">
+                        <input 
+                          type="file" 
+                          className="form-control form-control-sm" 
+                          accept="video/mp4,video/quicktime,video/webm,video/mkv"
+                          disabled={videoUploading}
+                          onChange={handleDirectVideoUpload} 
+                        />
+                        {videoUploading && (
+                          <div className="spinner-border spinner-border-sm text-danger" role="status"></div>
+                        )}
+                      </div>
+
                       <small className="text-muted d-block" style={{ fontSize: '11px' }}>
-                        * Supports YouTube links (e.g. <code>https://youtu.be/...</code> or <code>https://youtube.com/watch?v=...</code>) or MP4 video URLs.
+                        * Supports direct phone/camera videos (MP4, MOV, WebM up to 50MB) or YouTube links.
                       </small>
 
                       {/* Live Video Preview in Admin */}
@@ -1805,7 +1832,7 @@ function App() {
                             </div>
                           ) : (
                             <video controls className="w-100 rounded shadow-sm" style={{ maxHeight: '180px' }}>
-                              <source src={videoUrl} />
+                              <source src={getCleanImageUrl(videoUrl)} />
                               Your browser does not support the video tag.
                             </video>
                           )}
