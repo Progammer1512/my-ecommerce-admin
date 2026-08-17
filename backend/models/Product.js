@@ -34,12 +34,22 @@ const productSchema = new mongoose.Schema({
         type: [String],
         default: []
     },
+    // 🎥 Main Product Video Support (Uploads & YouTube/External links)
+    video: {
+        url: { type: String, default: '' },
+        videoType: { 
+            type: String, 
+            enum: ['file', 'youtube', 'none'], 
+            default: 'none' 
+        },
+        thumbnail: { type: String, default: '' }
+    },
     // 🟢 Dynamic Parameter Names defined by Admin: ["Capacity", "Speed"] or ["Size", "Color", "Weight"]
     dynamicAttributeNames: {
         type: [String],
         default: []
     },
-    // 🟢 Dynamic Variants with Custom Pricing, Stock & Dedicated Multi-Image Gallery
+    // 🟢 Dynamic Variants with Custom Pricing, Stock & Dedicated Multi-Image Gallery + Variant Video
     variants: {
         type: [{
             attributes: {
@@ -52,7 +62,11 @@ const productSchema = new mongoose.Schema({
             price: { type: Number, required: true },
             stock: { type: Number, default: 0 },
             image: { type: String, default: '' },      // Variant Cover Photo
-            images: { type: [String], default: [] }   // 📸 Variant Multi-Angle Gallery Images
+            images: { type: [String], default: [] },   // 📸 Variant Multi-Angle Gallery Images
+            video: {                                   // 🎥 Dedicated Variant Video
+                url: { type: String, default: '' },
+                videoType: { type: String, enum: ['file', 'youtube', 'none'], default: 'none' }
+            }
         }],
         default: []
     },
