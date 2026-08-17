@@ -4,7 +4,15 @@ const cors = require('cors');
 const helmet = require('helmet');
 const multer = require('multer');
 const jwt = require('jsonwebtoken');
+const path = require('path');
+const fs = require('fs');
 require('dotenv').config();
+
+// Ensure 'uploads' directory exists
+const uploadsDir = path.join(__dirname, 'uploads');
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
 
 // ==========================================
 // 🗄️ SAFE MODEL RESOLVER
@@ -63,7 +71,7 @@ const Category = resolveModel(rawCategory, 'Category', {
   slug: { type: String, default: '' }
 }, 'categories');
 
-// 5. 🟢 FULLY DYNAMIC PRODUCT MODEL (WITH VARIANT-LEVEL MULTI-IMAGE GALLERY)
+// 5. 🟢 FULLY DYNAMIC PRODUCT MODEL (WITH VARIANT-LEVEL MULTI-IMAGE GALLERY & VIDEO)
 let rawProd; try { rawProd = require('./models/Product'); } catch (e) {}
 const Product = resolveModel(rawProd, 'Product', {
   name: { type: String, required: true, trim: true },
@@ -73,6 +81,11 @@ const Product = resolveModel(rawProd, 'Product', {
   description: { type: String, default: '' },
   image: { type: String, default: '' },
   images: { type: [String], default: [] },
+  video: {
+    url: { type: String, default: '' },
+    videoType: { type: String, enum: ['file', 'youtube', 'none'], default: 'none' },
+    thumbnail: { type: String, default: '' }
+  },
   dynamicAttributeNames: { type: [String], default: [] },
   variants: {
     type: [{
@@ -82,7 +95,11 @@ const Product = resolveModel(rawProd, 'Product', {
       price: { type: Number, required: true },
       stock: { type: Number, default: 0 },
       image: { type: String, default: '' },
-      images: { type: [String], default: [] }
+      images: { type: [String], default: [] },
+      video: {
+        url: { type: String, default: '' },
+        videoType: { type: String, enum: ['file', 'youtube', 'none'], default: 'none' }
+      }
     }],
     default: []
   },
@@ -132,8 +149,36 @@ app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use(helmet({ crossOriginResourcePolicy: false }));
 
-const storage = multer.memoryStorage();
-const upload = multer({ storage, limits: { fileSize: 10 * 1024 * 1024 } });
+// 📂 SERVE STATIC UPLOADS FOLDER (IMAGES & VIDEOS)
+app.use('/uploads', express.static(uploadsDir));
+
+// Multer memory storage for quick base64 / CSV
+const memoryStorage = multer.memoryStorage();
+const uploadMemory = multer({ storage: memoryStorage, limits: { fileSize: 50 * 1024 * 1024 } });
+
+// Disk storage for large MP4 / video files
+const diskStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, uploadsDir);
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, 'video-' + uniqueSuffix + path.extname(file.originalname));
+  }
+});
+
+const uploadDiskVideo = multer({
+  storage: diskStorage,
+  limits: { fileSize: 50 * 1024 * 1024 }
+});
+
+// Use upload routes module if present
+try {
+  const uploadRoutes = require('./routes/uploadRoutes');
+  app.use('/api/upload', uploadRoutes);
+} catch (e) {
+  console.log('Using inline upload handler in server.js');
+}
 
 // =========================================================================
 // 🟢 HELPER: READS EXACT STOCK FROM PRODUCT
@@ -542,7 +587,7 @@ app.delete('/api/auth/admin-users/:id', async (req, res) => {
 });
 
 // =========================================================================
-// 🟢 4. PRODUCTS MANAGEMENT (WITH DEDICATED VARIANT MULTI-IMAGE SUPPORT)
+// 🟢 4. PRODUCTS MANAGEMENT (WITH DEDICATED VARIANT MULTI-IMAGE & VIDEO SUPPORT)
 // =========================================================================
 
 app.get('/api/products', async (req, res) => {
@@ -556,7 +601,7 @@ app.get('/api/products', async (req, res) => {
 
 app.post('/api/products', async (req, res) => {
   try {
-    const { name, price, category, categoryPath, description, image, images, dynamicAttributeNames, variants, countInStock, stock, rating, priority } = req.body;
+    const { name, price, category, categoryPath, description, image, images, video, dynamicAttributeNames, variants, countInStock, stock, rating, priority } = req.body;
     
     let galleryImages = [];
     if (Array.isArray(images) && images.length > 0) {
@@ -585,7 +630,8 @@ app.post('/api/products', async (req, res) => {
           price: Number(v.price) || Number(price) || 0,
           stock: Number(v.stock) || 0,
           image: varImgs.length > 0 ? varImgs[0] : (v.image || ''),
-          images: varImgs
+          images: varImgs,
+          video: v.video || { url: '', videoType: 'none' }
         };
       });
     }
@@ -598,6 +644,7 @@ app.post('/api/products', async (req, res) => {
       description: description || '',
       image: coverImage,
       images: galleryImages,
+      video: video || { url: '', videoType: 'none', thumbnail: '' },
       dynamicAttributeNames: Array.isArray(dynamicAttributeNames) ? dynamicAttributeNames : [],
       variants: parsedVariants,
       countInStock: Number(stock) || Number(countInStock) || 10,
@@ -637,6 +684,14 @@ app.put('/api/products/:id', async (req, res) => {
       updateData.images = [updateData.image];
     }
 
+    if (updateData.video) {
+      updateData.video = {
+        url: updateData.video.url || '',
+        videoType: updateData.video.videoType || 'none',
+        thumbnail: updateData.video.thumbnail || ''
+      };
+    }
+
     // 🟢 Parse Variants with dedicated images array on update
     if (updateData.variants && Array.isArray(updateData.variants)) {
       updateData.variants = updateData.variants.map(v => {
@@ -654,7 +709,8 @@ app.put('/api/products/:id', async (req, res) => {
           price: Number(v.price) || Number(updateData.price) || 0,
           stock: Number(v.stock) || 0,
           image: varImgs.length > 0 ? varImgs[0] : (v.image || ''),
-          images: varImgs
+          images: varImgs,
+          video: v.video || { url: '', videoType: 'none' }
         };
       });
     }
@@ -719,7 +775,7 @@ app.delete('/api/products/:id', async (req, res) => {
   }
 });
 
-app.post('/api/products/bulk-upload', upload.any(), async (req, res) => {
+app.post('/api/products/bulk-upload', uploadMemory.any(), async (req, res) => {
   try {
     let productsToInsert = [];
     if (req.body && req.body.products) {
@@ -753,6 +809,11 @@ app.post('/api/products/bulk-upload', upload.any(), async (req, res) => {
           description: item.description || '',
           image: primaryImg,
           images: galleryImgs.filter(Boolean),
+          video: {
+            url: item.video || item.videourl || '',
+            videoType: (item.video || item.videourl || '').includes('youtu') ? 'youtube' : ((item.video || item.videourl) ? 'file' : 'none'),
+            thumbnail: ''
+          },
           dynamicAttributeNames: item.dynamicAttributeNames || [],
           variants: item.variants ? (typeof item.variants === 'string' ? JSON.parse(item.variants) : item.variants) : [],
           countInStock: Number(item.stock) || Number(item.countInStock) || 10,
@@ -770,7 +831,8 @@ app.post('/api/products/bulk-upload', upload.any(), async (req, res) => {
   }
 });
 
-app.post('/api/upload', upload.single('image'), (req, res) => {
+// 📸 Image Single Upload Endpoints
+app.post(['/api/upload', '/api/products/upload'], uploadMemory.single('image'), (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ message: 'No file uploaded' });
     const base64Image = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
@@ -780,13 +842,20 @@ app.post('/api/upload', upload.single('image'), (req, res) => {
   }
 });
 
-app.post('/api/products/upload', upload.single('image'), (req, res) => {
+// 🎥 🟢 DIRECT VIDEO UPLOAD ENDPOINT (Fixes 404 on /api/upload/video)
+app.post('/api/upload/video', uploadDiskVideo.single('video'), (req, res) => {
   try {
-    if (!req.file) return res.status(400).json({ message: 'No file uploaded' });
-    const base64Image = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
-    return res.status(200).json({ imageUrl: base64Image });
+    if (!req.file) {
+      return res.status(400).json({ message: 'Please select a valid video file to upload' });
+    }
+    const cleanPath = `/uploads/${req.file.filename}`;
+    return res.status(200).json({
+      message: 'Video uploaded successfully!',
+      videoUrl: cleanPath
+    });
   } catch (error) {
-    return res.status(500).json({ message: 'Upload error: ' + error.message });
+    console.error('Video upload error:', error);
+    return res.status(500).json({ message: 'Video upload failed: ' + error.message });
   }
 });
 
@@ -1026,7 +1095,7 @@ app.post('/api/ai/chat', async (req, res) => {
       return res.status(200).json({ reply: orderReply.trim() });
     }
 
-    // 🟢 4. Context Query: If user is viewing a product and asks about price, stock, variants, details
+    // 🟢 4. Context Query
     const contextWords = ['price', 'stock', 'variant', 'variants', 'color', 'size', 'detail', 'details', 'cost', 'rate', 'specs', 'kitna', 'bhav', 'rupaye'];
     let searchFilter = {};
     if (currentProductName && (contextWords.some(w => lowerQuery.includes(w)) || lowerQuery.length <= 6)) {
