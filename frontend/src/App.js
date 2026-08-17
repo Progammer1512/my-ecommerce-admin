@@ -34,6 +34,16 @@ const parseCleanStock = (val) => {
   return isNaN(num) ? 0 : num;
 };
 
+// 🎥 HELPER: DETECT & PARSE YOUTUBE EMBED URL
+const getEmbedUrl = (url) => {
+  if (!url) return '';
+  const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
+  const match = url.match(regExp);
+  return (match && match[2].length === 11)
+    ? `https://www.youtube.com/embed/${match[2]}`
+    : url;
+};
+
 function App() {
   const [user, setUser] = useState(null);
   const [loginEmail, setLoginEmail] = useState('');
@@ -92,6 +102,10 @@ function App() {
   const [stock, setStock] = useState(0);
   const [productPriority, setProductPriority] = useState(100);
   const [rankInputs, setRankInputs] = useState({});
+
+  // 🎥 VIDEO STATE (YOUTUBE / DIRECT VIDEO URL)
+  const [videoUrl, setVideoUrl] = useState('');
+  const [videoType, setVideoType] = useState('youtube');
 
   // 🟢 100% DYNAMIC ATTRIBUTES & MULTI-IMAGE VARIANTS BUILDER
   const [dynamicAttributeNames, setDynamicAttributeNames] = useState(['Size', 'Color']);
@@ -781,6 +795,11 @@ function App() {
               description: rawDesc,
               image: String(rawImage).trim(),
               images: rawImages,
+              video: {
+                url: String(cleanRow.video || cleanRow.videourl || '').trim(),
+                videoType: (cleanRow.video || cleanRow.videourl || '').includes('youtu') ? 'youtube' : ((cleanRow.video || cleanRow.videourl) ? 'file' : 'none'),
+                thumbnail: ''
+              },
               variants: [],
               stock: rawStock,
               countInStock: rawStock,
@@ -846,7 +865,7 @@ function App() {
     }
   };
 
-  // 🟢 SAVE PRODUCT (SMART PRICE/STOCK CALCULATION & FULL VARIANT MULTI-IMAGE SYNC)
+  // 🟢 SAVE PRODUCT (SMART PRICE/STOCK CALCULATION & FULL VARIANT MULTI-IMAGE SYNC + VIDEO)
   const handleProductSubmit = async (e) => {
     e.preventDefault();
     
@@ -863,6 +882,9 @@ function App() {
 
     const primaryCategory = selectedCategoryPath[selectedCategoryPath.length - 1] || 'General';
 
+    const cleanVideoUrl = (videoUrl || '').trim();
+    const finalVideoType = cleanVideoUrl ? (cleanVideoUrl.includes('youtu') ? 'youtube' : videoType) : 'none';
+
     const productData = { 
       name, 
       price: finalPrice, 
@@ -871,6 +893,11 @@ function App() {
       description: description || 'High quality store product.', 
       image: finalCoverImage,
       images: finalImagesList,
+      video: {
+        url: cleanVideoUrl,
+        videoType: finalVideoType,
+        thumbnail: ''
+      },
       dynamicAttributeNames,
       variants: variants || [],
       stock: finalStock,
@@ -881,10 +908,10 @@ function App() {
     try {
       if (editingId) {
         await axios.put(`${BASE_URL}/api/products/${editingId}`, productData, getAuthHeader());
-        alert(`✅ Product '${name}' Updated with Dedicated Variant Galleries!`);
+        alert(`✅ Product '${name}' Updated with Video & Variant Galleries!`);
       } else {
         await axios.post(`${BASE_URL}/api/products`, productData, getAuthHeader());
-        alert(`🎉 New Product Created with Variant Galleries!`);
+        alert(`🎉 New Product Created with Video & Variant Galleries!`);
       }
       resetProductForm();
       fetchData();
@@ -946,6 +973,16 @@ function App() {
 
     setImage(primaryImg);
     setImages(galleryImgs);
+
+    // Load Video
+    if (p.video && p.video.url) {
+      setVideoUrl(p.video.url);
+      setVideoType(p.video.videoType || (p.video.url.includes('youtu') ? 'youtube' : 'file'));
+    } else {
+      setVideoUrl('');
+      setVideoType('youtube');
+    }
+
     setDynamicAttributeNames(Array.isArray(p.dynamicAttributeNames) && p.dynamicAttributeNames.length > 0 ? p.dynamicAttributeNames : ['Size', 'Color']);
     
     // Parse variants with images
@@ -986,6 +1023,8 @@ function App() {
     setDescription('');
     setImage('');
     setImages([]);
+    setVideoUrl('');
+    setVideoType('youtube');
     setVariants([]);
     setVariantInputs({});
     setVariantPrice('');
@@ -1547,7 +1586,7 @@ function App() {
                 </button>
               </form>
               <small className="text-muted mt-2 d-block">
-                CSV Headers: <code>name, price, category, description, image, images (pipe | separated), stock, priority</code>
+                CSV Headers: <code>name, price, category, description, image, images (pipe | separated), video, stock, priority</code>
               </small>
             </div>
 
@@ -1598,7 +1637,7 @@ function App() {
                           <button 
                             type="button" 
                             className="btn btn-link btn-sm p-0 text-decoration-none fw-bold" 
-                            style={{ fontSize: '11px' }}
+                            style={{ fontSize: '11px' }} 
                             onClick={() => setShowInlineCategoryInput(!showInlineCategoryInput)}
                           >
                             {showInlineCategoryInput ? 'Cancel' : '+ New Category'}
@@ -1705,6 +1744,71 @@ function App() {
                               </button>
                             </div>
                           ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* 🎥 PRODUCT VIDEO ATTACHMENT SECTION */}
+                    <div className="mb-3 p-3 bg-light rounded border border-danger border-opacity-25">
+                      <div className="d-flex justify-content-between align-items-center mb-2">
+                        <label className="form-label fw-bold text-danger m-0">
+                          🎥 Product Demo Video (Optional)
+                        </label>
+                        {videoUrl && (
+                          <span className="badge bg-danger">Video Attached</span>
+                        )}
+                      </div>
+
+                      <div className="input-group input-group-sm mb-2">
+                        <span className="input-group-text bg-white fw-bold text-muted" style={{ fontSize: '11px' }}>
+                          Video URL:
+                        </span>
+                        <input 
+                          type="text" 
+                          className="form-control" 
+                          placeholder="Paste YouTube Link or Video URL (https://...)" 
+                          value={videoUrl} 
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setVideoUrl(val);
+                            if (val.includes('youtu')) setVideoType('youtube');
+                            else if (val) setVideoType('file');
+                          }} 
+                        />
+                        {videoUrl && (
+                          <button 
+                            type="button" 
+                            className="btn btn-outline-danger" 
+                            onClick={() => { setVideoUrl(''); setVideoType('youtube'); }}
+                            title="Clear Video"
+                          >
+                            ✕ Clear
+                          </button>
+                        )}
+                      </div>
+
+                      <small className="text-muted d-block" style={{ fontSize: '11px' }}>
+                        * Supports YouTube links (e.g. <code>https://youtu.be/...</code> or <code>https://youtube.com/watch?v=...</code>) or MP4 video URLs.
+                      </small>
+
+                      {/* Live Video Preview in Admin */}
+                      {videoUrl && (
+                        <div className="mt-2 pt-2 border-top">
+                          <span className="small fw-bold text-dark d-block mb-1">Live Video Preview:</span>
+                          {videoUrl.includes('youtu') ? (
+                            <div className="ratio ratio-16x9 rounded overflow-hidden shadow-sm" style={{ maxHeight: '180px' }}>
+                              <iframe 
+                                src={getEmbedUrl(videoUrl)} 
+                                title="Video Preview" 
+                                allowFullScreen
+                              ></iframe>
+                            </div>
+                          ) : (
+                            <video controls className="w-100 rounded shadow-sm" style={{ maxHeight: '180px' }}>
+                              <source src={videoUrl} />
+                              Your browser does not support the video tag.
+                            </video>
+                          )}
                         </div>
                       )}
                     </div>
@@ -1976,6 +2080,7 @@ function App() {
                             const currentInputRank = rankInputs[targetId] !== undefined ? rankInputs[targetId] : defaultRank;
                             const totalImgs = Array.isArray(p.images) && p.images.length > 0 ? p.images.length : (p.image ? 1 : 0);
                             const totalVariants = Array.isArray(p.variants) ? p.variants.length : 0;
+                            const hasVideo = p.video && p.video.url;
 
                             return (
                             <tr key={targetId} className={isSelected ? 'table-warning' : ''}>
@@ -2023,10 +2128,15 @@ function App() {
                                   />
                                   <div>
                                     <span>{p.name}</span>
-                                    <div className="d-flex gap-1 mt-1">
+                                    <div className="d-flex flex-wrap gap-1 mt-1">
                                       <span className="badge bg-secondary" style={{ fontSize: '9px' }}>
                                         📸 {totalImgs} Photos
                                       </span>
+                                      {hasVideo && (
+                                        <span className="badge bg-danger" style={{ fontSize: '9px' }}>
+                                          🎥 Video
+                                        </span>
+                                      )}
                                       {totalVariants > 0 && (
                                         <span className="badge bg-primary" style={{ fontSize: '9px' }}>
                                           ⚙️ {totalVariants} Options
