@@ -60,17 +60,63 @@ function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const [activeTab, setActiveTab] = useState('dashboard');
-  const [products, setProducts] = useState([]);
+
+  // 🟢 INSTANT LOCAL CACHED STATES (ZERO DELAY INITIAL LOAD)
+  const [products, setProducts] = useState(() => {
+    try {
+      const cached = localStorage.getItem('techstore_admin_cached_products');
+      return cached ? JSON.parse(cached) : [];
+    } catch (e) {
+      return [];
+    }
+  });
+
+  const [orders, setOrders] = useState(() => {
+    try {
+      const cached = localStorage.getItem('techstore_admin_cached_orders');
+      return cached ? JSON.parse(cached) : [];
+    } catch (e) {
+      return [];
+    }
+  });
+
+  const [banners, setBanners] = useState(() => {
+    try {
+      const cached = localStorage.getItem('techstore_admin_cached_banners');
+      return cached ? JSON.parse(cached) : [];
+    } catch (e) {
+      return [];
+    }
+  });
+
+  const [categoryTree, setCategoryTree] = useState(() => {
+    try {
+      const cached = localStorage.getItem('techstore_admin_cached_tree');
+      return cached ? JSON.parse(cached) : [];
+    } catch (e) {
+      return [];
+    }
+  });
+
+  const [rawCategoriesList, setRawCategoriesList] = useState(() => {
+    try {
+      const cached = localStorage.getItem('techstore_admin_cached_raw_cats');
+      return cached ? JSON.parse(cached) : [
+        { _id: 'General', name: 'General' },
+        { _id: 'Electronics', name: 'Electronics' },
+        { _id: 'Fashion', name: 'Fashion' }
+      ];
+    } catch (e) {
+      return [];
+    }
+  });
+
   const [selectedProductIds, setSelectedProductIds] = useState([]);
-  const [orders, setOrders] = useState([]);
-  const [banners, setBanners] = useState([]);
   const [reviews, setReviews] = useState([]);
   const [customersList, setCustomersList] = useState([]);
   const [csvFile, setCsvFile] = useState(null);
 
   // 🌳 NESTED CATEGORIES ENGINE STATES
-  const [categoryTree, setCategoryTree] = useState([]);
-  const [rawCategoriesList, setRawCategoriesList] = useState([]);
   const [selectedParentCategory, setSelectedParentCategory] = useState('');
   const [newNestedCategoryName, setNewNestedCategoryName] = useState('');
   const [showInlineCategoryInput, setShowInlineCategoryInput] = useState(false);
@@ -274,24 +320,27 @@ function App() {
     window.location.reload();
   };
 
+  // 🟢 FETCH DATA WITH SILENT BACKGROUND CACHE UPDATES
   const fetchData = async () => {
     try {
       const authConfig = getAuthHeader();
 
       const prodRes = await axios.get(`${BASE_URL}/api/products`, authConfig);
       const fetchedProducts = prodRes.data.products || prodRes.data;
-      const sortedProducts = Array.isArray(fetchedProducts) 
-        ? fetchedProducts.sort((a, b) => (Number(a.priority) || 100) - (Number(b.priority) || 100))
-        : [];
-      setProducts(sortedProducts);
+      if (Array.isArray(fetchedProducts)) {
+        const sortedProducts = fetchedProducts.sort((a, b) => (Number(a.priority) || 100) - (Number(b.priority) || 100));
+        setProducts(sortedProducts);
+        localStorage.setItem('techstore_admin_cached_products', JSON.stringify(sortedProducts));
+      }
 
-      // Fetch Nested Categories Tree and combine with existing product categories
+      // Fetch Nested Categories Tree
       try {
         const catRes = await axios.get(`${BASE_URL}/api/categories`, authConfig);
         let combinedCats = [];
         if (catRes.data && catRes.data.categories) {
           combinedCats = catRes.data.categories;
           setCategoryTree(catRes.data.tree || []);
+          localStorage.setItem('techstore_admin_cached_tree', JSON.stringify(catRes.data.tree || []));
         }
 
         const prodCategories = Array.isArray(fetchedProducts)
@@ -305,7 +354,6 @@ function App() {
           }
         });
 
-        // Ensure standard categories exist as defaults
         ['General', 'Electronics', 'Fashion', 'Pets', 'Footwear', 'Accessories'].forEach(defaultCat => {
           if (!existingNames.has(defaultCat) && !combinedCats.some(c => c.name === defaultCat)) {
             combinedCats.push({ _id: defaultCat, name: defaultCat });
@@ -313,6 +361,7 @@ function App() {
         });
 
         setRawCategoriesList(combinedCats);
+        localStorage.setItem('techstore_admin_cached_raw_cats', JSON.stringify(combinedCats));
       } catch (catErr) {
         console.warn("Categories fetch fallback");
       }
@@ -325,9 +374,13 @@ function App() {
         _id: ord._id || ord.id || ord.orderId || `LOCAL_ID_${idx}`
       }));
       setOrders(sanitizedOrders);
+      localStorage.setItem('techstore_admin_cached_orders', JSON.stringify(sanitizedOrders));
 
       const bannerRes = await axios.get(`${BASE_URL}/api/banners`, authConfig);
-      setBanners(Array.isArray(bannerRes.data) ? bannerRes.data : []);
+      if (Array.isArray(bannerRes.data)) {
+        setBanners(bannerRes.data);
+        localStorage.setItem('techstore_admin_cached_banners', JSON.stringify(bannerRes.data));
+      }
 
       const revRes = await axios.get(`${BASE_URL}/api/reviews`, authConfig);
       setReviews(Array.isArray(revRes.data) ? revRes.data : []);
@@ -342,18 +395,14 @@ function App() {
         if (Array.isArray(custRes.data)) {
           setCustomersList(custRes.data);
         }
-      } catch (e) {
-        console.log("Customer fetch fallback");
-      }
+      } catch (e) {}
 
       try {
         const adminRes = await axios.get(`${BASE_URL}/api/auth/admin-users`, authConfig);
         if (Array.isArray(adminRes.data)) {
           setAdminUsersList(adminRes.data);
         }
-      } catch (e) {
-        console.log("Admin users fetch fallback");
-      }
+      } catch (e) {}
     } catch (error) {
       console.error('Error fetching admin data:', error);
     }
@@ -640,7 +689,7 @@ function App() {
     setVariantImages(variantImages.filter((_, idx) => idx !== indexToRemove));
   };
 
-  // 🟢 DYNAMIC ATTRIBUTE NAMES HANDLER (e.g. Size, Capacity, Weight, Speed)
+  // 🟢 DYNAMIC ATTRIBUTE NAMES HANDLER
   const handleAddAttributeName = () => {
     if (!newAttributeNameInput.trim()) return;
     const cleanName = newAttributeNameInput.trim();
@@ -654,7 +703,7 @@ function App() {
     setDynamicAttributeNames(dynamicAttributeNames.filter(a => a !== attrName));
   };
 
-  // 🟢 ADD DYNAMIC VARIANT OPTION (WITH ITS OWN DEDICATED MULTI-IMAGE GALLERY)
+  // 🟢 ADD DYNAMIC VARIANT OPTION
   const handleAddDynamicVariant = () => {
     const parsedPrice = Number(variantPrice);
     const parsedStock = Number(variantStock);
@@ -684,7 +733,6 @@ function App() {
     const updatedVariants = [...variants, newOption];
     setVariants(updatedVariants);
 
-    // ⚡ AUTO-CALCULATION: Update Base Price with minimum variant price & Base Stock with total sum
     const minPrice = Math.min(...updatedVariants.map(v => v.price));
     const totalStock = updatedVariants.reduce((sum, v) => sum + v.stock, 0);
     setPrice(minPrice);
@@ -954,7 +1002,9 @@ function App() {
           const updated = prevProducts.map(p => 
             (p._id === targetId || p.id === targetId) ? { ...p, priority: numRank } : p
           );
-          return updated.sort((a, b) => (Number(a.priority) || 100) - (Number(b.priority) || 100));
+          const sorted = updated.sort((a, b) => (Number(a.priority) || 100) - (Number(b.priority) || 100));
+          localStorage.setItem('techstore_admin_cached_products', JSON.stringify(sorted));
+          return sorted;
         });
 
         setRankInputs(prev => ({ ...prev, [targetId]: numRank }));
@@ -1017,6 +1067,11 @@ function App() {
     if (window.confirm('Delete product permanently?')) {
       try {
         await axios.delete(`${BASE_URL}/api/products/${id}`, getAuthHeader());
+        setProducts(prev => {
+          const filtered = prev.filter(p => (p._id || p.id) !== id);
+          localStorage.setItem('techstore_admin_cached_products', JSON.stringify(filtered));
+          return filtered;
+        });
         fetchData();
       } catch (error) {
         alert('Delete failed: ' + (error.response?.data?.message || error.message));
@@ -1135,7 +1190,6 @@ function App() {
     }
   };
 
-  // Helper to render nested category tree items recursively
   const renderCategoryTreeUI = (tree, depth = 0) => {
     return tree.map((node) => (
       <div key={node._id} style={{ marginLeft: `${depth * 20}px` }} className="border-start ps-2 my-1">
@@ -1300,7 +1354,6 @@ function App() {
         <span className="fw-bold text-warning d-none d-sm-inline fs-5">TechStore Admin</span>
 
         <div className="d-flex align-items-center gap-2">
-          {/* 📲 1-CLICK INSTALL ADMIN APP BUTTON */}
           {installPrompt && !isRunningStandalone() && (
             <button 
               className="btn btn-outline-warning btn-sm fw-bold rounded-pill shadow-sm d-flex align-items-center gap-1"
